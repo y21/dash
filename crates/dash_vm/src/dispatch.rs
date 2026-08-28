@@ -445,27 +445,27 @@ mod extract {
 mod handlers {
     use dash_middle::compiler::constant::FunctionConstant;
     use dash_middle::compiler::external::{External, PossiblyExternalId};
-    use dash_middle::compiler::extract::extract_back_infallible;
+    use dash_middle::compiler::extract::{BackwardSequence, extract_back_infallible};
     use dash_middle::compiler::instruction::Instruction::CallForInIterator;
     use dash_middle::compiler::instruction::{AssignKind as AssignKind2, IntrinsicOperation};
     use dash_middle::compiler::operands::{
-        AddOperands, ArrayLiteralOperands, AssignKind, AssignPropertiesOperands, AwaitOperands, BinaryOperator,
-        BindThisOperands, BitandOperands, BitnotOperands, BitorOperands, BitshlOperands, BitshrOperands,
-        BitushrOperands, BitxorOperands, BooleanConstantOperands, BooleanConstantWide, CallOperands,
-        CallSymbolIteratorOperands, ConditionalJumpNoPopOperands, ConditionalJumpPopOperands, DelayedRetOperands,
-        DeletePropertyDynamicOperands, DeletePropertyStaticOperands, DivOperands, DynamicPropertyAccessOperands,
-        DynamicPropertyAssignOperands, EqOperands, ExportDefaultOperands, ExportNamedOperands, ExportProperty,
-        FinallyEndOperands, ForInIteratorOperands, FunctionConstantOperands, GeOperands, GtOperands, ImportDynOperands,
-        ImportStaticOperands, InstanceofOperands, JmpFalseNoPopOperands, JmpFalsePopOperands, JmpNullishNoPopOperands,
-        JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands,
-        JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands, LdLocalOperands, LeOperands, LtOperands,
-        MulOperands, NeOperands, NegOperands, NotOperands, NumberConstantOperands, NumberConstantWide,
-        ObjectDestructuringMember, ObjectDestructuringOperands, ObjectInOperands, ObjectLiteralOperands,
-        ObjectProperty, OptionNoneMax, PopOperands, PosOperands, PowOperands, RegexConstantOperands, RemOperands,
-        RetOperands, StaticPropertyAccessOperands, StaticPropertyAssignOperands, StoreGlobalOperands,
-        StoreLocalExtOperands, StoreLocalOperands, StrictEqOperands, StrictNeOperands, StringConstantOperands,
-        SubOperands, SymbolConstantWide, ThrowOperands, TryCatchDepth, TypeofIdentOperands, TypeofOperands,
-        YieldOperands,
+        AddOperands, ArrayDestructuringMember, ArrayDestructuringOperands, ArrayLiteralOperands, AssignKind,
+        AssignPropertiesOperands, AwaitOperands, BinaryOperator, BindThisOperands, BitandOperands, BitnotOperands,
+        BitorOperands, BitshlOperands, BitshrOperands, BitushrOperands, BitxorOperands, BooleanConstantOperands,
+        BooleanConstantWide, CallOperands, CallSymbolIteratorOperands, ConditionalJumpNoPopOperands,
+        ConditionalJumpPopOperands, DelayedRetOperands, DeletePropertyDynamicOperands, DeletePropertyStaticOperands,
+        DivOperands, DynamicPropertyAccessOperands, DynamicPropertyAssignOperands, EqOperands, ExportDefaultOperands,
+        ExportNamedOperands, ExportProperty, FinallyEndOperands, ForInIteratorOperands, FunctionConstantOperands,
+        GeOperands, GtOperands, ImportDynOperands, ImportStaticOperands, InstanceofOperands, JmpFalseNoPopOperands,
+        JmpFalsePopOperands, JmpNullishNoPopOperands, JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands,
+        JmpTruePopOperands, JmpUndefinedNoPopOperands, JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands,
+        LdLocalOperands, LeOperands, LtOperands, MulOperands, NeOperands, NegOperands, NotOperands,
+        NumberConstantOperands, NumberConstantWide, ObjectDestructuringMember, ObjectDestructuringOperands,
+        ObjectInOperands, ObjectLiteralOperands, ObjectProperty, OptionDiscriminatedByte, OptionNoneMax, PopOperands,
+        PosOperands, PowOperands, RegexConstantOperands, RemOperands, RetOperands, StaticPropertyAccessOperands,
+        StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalExtOperands, StoreLocalOperands, StrictEqOperands,
+        StrictNeOperands, StringConstantOperands, SubOperands, SymbolConstantWide, ThrowOperands, TryCatchDepth,
+        TypeofIdentOperands, TypeofOperands, YieldOperands,
     };
     use dash_middle::compiler::{FunctionCallKind, StaticImportKind};
     use dash_middle::interner::{Symbol, sym};
@@ -497,7 +497,7 @@ mod handlers {
     use crate::value::regex::RegExp;
     use crate::value::{Unpack, ValueKind};
 
-    use self::extract::{ArrayElement, BackwardSequence, IdentW, NumberWConstant};
+    use self::extract::{ArrayElement, IdentW, NumberWConstant};
 
     use super::*;
 
@@ -2203,12 +2203,16 @@ mod handlers {
     }
 
     pub fn arraydestruct(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let array = cx.pop_stack_rooted();
+        let ArrayDestructuringOperands { array, members } = extract_back_infallible(&mut cx);
 
-        let mut iter = BackwardSequence::<Option<(bool, NumberWConstant)>>::new_u16(&mut cx).enumerate();
+        let mut members = <_ as IteratorWith<&mut DispatchContext<'_>>>::enumerate(members);
 
-        while let Some((i, id)) = iter.next_infallible(&mut cx) {
-            if let Some((has_default, NumberWConstant(id))) = id {
+        while let Some((i, OptionDiscriminatedByte(member))) = members.next_infallible(&mut cx) {
+            if let Some(ArrayDestructuringMember {
+                has_default,
+                id: NumberConstantWide(id),
+            }) = member
+            {
                 let id = BackLocalId(id as u16);
                 let mut prop = array
                     .get_property(i.to_key(&mut cx.scope), &mut cx.scope)?
