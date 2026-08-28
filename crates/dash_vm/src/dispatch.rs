@@ -456,13 +456,14 @@ mod handlers {
         ConditionalJumpPopOperands, DelayedRetOperands, DeletePropertyDynamicOperands, DeletePropertyStaticOperands,
         DivOperands, DynamicPropertyAccessOperands, DynamicPropertyAssignOperands, EqOperands, ExportDefaultOperands,
         ExportNamedOperands, ExportProperty, FinallyEndOperands, ForInIteratorOperands, FunctionConstantOperands,
-        GeOperands, GtOperands, ImportDynOperands, ImportStaticOperands, InstanceofOperands, JmpFalseNoPopOperands,
-        JmpFalsePopOperands, JmpNullishNoPopOperands, JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands,
-        JmpTruePopOperands, JmpUndefinedNoPopOperands, JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands,
-        LdLocalOperands, LeOperands, LtOperands, MulOperands, NeOperands, NegOperands, NotOperands,
-        NumberConstantOperands, NumberConstantWide, ObjectDestructuringMember, ObjectDestructuringOperands,
-        ObjectInOperands, ObjectLiteralOperands, ObjectProperty, OptionDiscriminatedByte, OptionNoneMax, PopOperands,
-        PosOperands, PowOperands, RegexConstantOperands, RemOperands, RetOperands, StaticPropertyAccessOperands,
+        GeOperands, GtOperands, ImportDynOperands, ImportStaticOperands, InstanceofOperands, IntrinsicCallOperands,
+        IntrinsicKind, IntrinsicOperands, JmpFalseNoPopOperands, JmpFalsePopOperands, JmpNullishNoPopOperands,
+        JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands,
+        JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands, LdLocalOperands, LeOperands, LtOperands,
+        MulOperands, NeOperands, NegOperands, NotOperands, NumberConstantOperands, NumberConstantWide, NumberInline8,
+        NumberInline32, ObjectDestructuringMember, ObjectDestructuringOperands, ObjectInOperands,
+        ObjectLiteralOperands, ObjectProperty, OptionDiscriminatedByte, OptionNoneMax, PopOperands, PosOperands,
+        PowOperands, RegexConstantOperands, RemOperands, RetOperands, StaticPropertyAccessOperands,
         StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalExtOperands, StoreLocalOperands, StrictEqOperands,
         StrictNeOperands, StringConstantOperands, SubOperands, SymbolConstantWide, ThrowOperands, TryCatchDepth,
         TypeofIdentOperands, TypeofOperands, YieldOperands,
@@ -479,8 +480,9 @@ mod handlers {
     use std::rc::Rc;
 
     use crate::frame::{FrameState, Ip, Sp, TryBlock};
+    use crate::gc::ObjectId;
     use crate::throw;
-    use crate::util::unlikely;
+    use crate::util::{likely, unlikely};
     use crate::value::array::table::ArrayTable;
     use crate::value::array::{Array, ArrayIterator};
     use crate::value::function::args::CallArgs;
@@ -2233,188 +2235,191 @@ mod handlers {
     }
 
     pub fn intrinsic_op(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let op = IntrinsicOperation::from_repr(cx.fetch_and_inc_ip()).unwrap();
+        let IntrinsicOperands(op) = extract_back_infallible(&mut cx);
 
-        macro_rules! lr_as_num_spec {
-            () => {{
-                // Unrooted is technically fine here, nothing can trigger a GC cycle
-                // OK to remove if it turns out to be a useful opt
-                // TODO: this can be optimized by reinterpreting it as a number directly, but could be potentially quite unsafe
-                let (left, right) = cx.pop_stack2_rooted();
-                match (left.unpack(), right.unpack()) {
-                    (ValueKind::Number(l), ValueKind::Number(r)) => (l.0, r.0),
-                    _ => unreachable!(),
+        #[inline(always)]
+        fn binop_numbers_to_f64(left: Value, right: Value) -> (f64, f64) {
+            match (left.unpack(), right.unpack()) {
+                (ValueKind::Number(l), ValueKind::Number(r)) => (l.0, r.0),
+                _ => unreachable!(),
+            }
+        }
+
+        #[inline(always)]
+        fn number_binop_number(left: Value, right: Value, scope: &mut LocalScope<'_>, op: fn(f64, f64) -> f64) {
+            let (left, right) = binop_numbers_to_f64(left, right);
+            scope.stack.push(Value::number(op(left, right)));
+        }
+
+        #[inline(always)]
+        fn number_binop_bool(left: Value, right: Value, scope: &mut LocalScope<'_>, op: fn(f64, f64) -> bool) {
+            let (left, right) = binop_numbers_to_f64(left, right);
+            let res = op(left, right);
+            scope.stack.push(Value::boolean(res));
+        }
+
+        #[inline(always)]
+        fn number_binop_i32(left: Value, right: Value, scope: &mut LocalScope<'_>, op: fn(i32, i32) -> i32) {
+            let (left, right) = binop_numbers_to_f64(left, right);
+            let left = left as i64 as i32;
+            let right = right as i64 as i32;
+            let res = op(left, right);
+            scope.stack.push(Value::number(res as f64));
+        }
+
+        #[inline(always)]
+        fn number_binop_u32(left: Value, right: Value, scope: &mut LocalScope<'_>, op: fn(u32, u32) -> u32) {
+            let (left, right) = binop_numbers_to_f64(left, right);
+            let left = left as i64 as u32;
+            let right = right as i64 as u32;
+            let res = op(left, right);
+            scope.stack.push(Value::number(res as f64));
+        }
+
+        #[inline(always)]
+        fn prefix(local: BackLocalId, cx: &mut DispatchContext<'_>, op: fn(f64) -> f64) {
+            let value = match cx.get_local(local).unpack() {
+                ValueKind::Number(n) => n.0,
+                _ => unreachable!(),
+            };
+            let res = Value::number(op(value));
+            cx.set_local(local, res.into());
+            cx.stack.push(res);
+        }
+
+        #[inline(always)]
+        fn postfix(local: BackLocalId, cx: &mut DispatchContext<'_>, op: fn(f64) -> f64) {
+            let value = match cx.get_local(local).unpack() {
+                ValueKind::Number(n) => n.0,
+                _ => unreachable!(),
+            };
+            let res = Value::number(op(value));
+            cx.set_local(local, res.into());
+            cx.stack.push(Value::number(value));
+        }
+
+        #[inline(always)]
+        fn number_f64_binop_bool(left: Value, right: f64, scope: &mut LocalScope<'_>, op: fn(f64, f64) -> bool) {
+            let left = match left.unpack() {
+                ValueKind::Number(n) => n.0,
+                _ => unreachable!(),
+            };
+            let res = op(left, right);
+            scope.stack.push(Value::boolean(res));
+        }
+
+        fn fn_call_impl(
+            IntrinsicCallOperands { argc }: IntrinsicCallOperands,
+            func: ObjectId,
+            global_key: Symbol,
+            object_key: Symbol,
+            cx: &mut DispatchContext<'_>,
+        ) -> Result<(), Unrooted> {
+            let args = cx.drain_stack_rooted(argc.into()).collect::<CallArgs>();
+
+            if likely(cx.builtins_purity()) {
+                // Fast path: call builtin directly
+                let result = func.apply(This::default(), args, &mut cx.scope)?;
+                cx.push_stack(result);
+            } else {
+                // Builtins impure, fallback to slow dynamic property lookup
+                for arg in &args {
+                    cx.scope.add(arg.clone());
                 }
-            }};
+
+                let k = cx
+                    .global
+                    .clone()
+                    .get_property(global_key.to_key(&mut cx.scope), &mut cx.scope)?
+                    .root(&mut cx.scope);
+                let fun = k
+                    .get_property(object_key.to_key(&mut cx.scope), &mut cx.scope)?
+                    .root(&mut cx.scope);
+                let result = fun.apply(This::default(), args, &mut cx.scope)?;
+                cx.push_stack(result);
+            }
+
+            Ok(())
         }
-
-        macro_rules! bin_op {
-            ($fun:expr) => {{
-                let (l, r) = lr_as_num_spec!();
-                cx.stack.push(Value::number($fun(l, r)));
-            }};
-        }
-
-        macro_rules! bin_op_i64 {
-            ($op:tt) => {{
-                let (l, r) = lr_as_num_spec!();
-                cx.stack.push(Value::number(((l as i64 as i32) $op (r as i64 as i32)) as f64));
-            }};
-        }
-        macro_rules! bin_op_u64 {
-            ($op:tt) => {{
-                let (l, r) = lr_as_num_spec!();
-                cx.stack.push(Value::number(((l as i64 as u32) $op (r as i64 as u32)) as f64));
-            }};
-        }
-
-        macro_rules! bin_op_to_bool {
-            ($op:tt) => {{
-                let (l, r) = lr_as_num_spec!();
-                cx.stack.push(Value::boolean(l $op r));
-            }};
-        }
-
-        macro_rules! postfix {
-            ($op:tt) => {{
-                let id = BackLocalId(cx.fetch_and_inc_ip() as u16);
-                let local = match cx.get_local(id).unpack() {
-                    ValueKind::Number(n) => n,
-                    _ => unreachable!(),
-                };
-                cx.set_local(id, Value::number(local.0 $op 1.0).into());
-                cx.stack.push(Value::number(local.0));
-            }};
-        }
-
-        macro_rules! prefix {
-            ($op:tt) => {{
-                let id = BackLocalId(cx.fetch_and_inc_ip() as u16);
-                let local = match cx.get_local(id).unpack() {
-                    ValueKind::Number(n) => n,
-                    _ => unreachable!(),
-                };
-                let new = Value::number(local.0 $op 1.0);
-                cx.set_local(id, new.into());
-                cx.stack.push(new);
-            }};
-        }
-
-        macro_rules! bin_op_numl_constr {
-            ($op:tt) => {{
-                let left = match cx.pop_stack_rooted().unpack() {
-                    ValueKind::Number(n) => n.0,
-                    _ => unreachable!(),
-                };
-                let right = cx.fetch_and_inc_ip() as f64;
-                cx.stack.push(Value::boolean(left $op right));
-            }};
-        }
-
-        fn logical_op_numl_u32r_n<F: FnOnce(f64, f64) -> bool>(mut cx: DispatchContext<'_>, f: F) {
-            let vm: &mut Vm = &mut cx;
-
-            let Some(value) = vm.stack.last_mut() else {
-                unreachable!()
-            };
-            let ValueKind::Number(Number(left)) = value.unpack() else {
-                unreachable!()
-            };
-            let right = vm.frames.fetch32_and_inc_ip() as f64;
-
-            *value = Value::boolean(f(left, right));
-        }
-
         macro_rules! fn_call {
-            ($fun:ident, $k:expr, $v:expr) => {{
-                let argc = cx.fetch_and_inc_ip();
-                let args = cx.drain_stack_rooted(argc.into()).collect::<CallArgs>();
-                let fun = cx.statics.$fun.clone();
-
-                if unlikely(!cx.builtins_purity()) {
-                    for arg in &args {
-                        cx.scope.add(arg.clone());
-                    }
-
-                    // Builtins impure, fallback to slow dynamic property lookup
-                    let k = cx
-                        .global
-                        .clone()
-                        .get_property($k.to_key(&mut cx.scope), &mut cx.scope)?
-                        .root(&mut cx.scope);
-                    let fun = k
-                        .get_property($v.to_key(&mut cx.scope), &mut cx.scope)?
-                        .root(&mut cx.scope);
-                    let result = fun.apply(This::default(), args, &mut cx.scope)?;
-                    cx.push_stack(result);
-                } else {
-                    // Fastpath: call builtin directly
-                    // TODO: should we add to externals?
-                    let result = fun.apply(This::default(), args, &mut cx.scope)?;
-                    cx.push_stack(result);
-                }
-            }};
+            ($call:expr, $func:ident, $global_key:ident.$object_key:ident) => {
+                fn_call_impl(
+                    $call,
+                    cx.statics.$func,
+                    sym::$global_key,
+                    sym::$object_key,
+                    &mut cx,
+                )?
+            };
         }
 
         match op {
-            IntrinsicOperation::AddNumLR => bin_op!(Add::add),
-            IntrinsicOperation::SubNumLR => bin_op!(Sub::sub),
-            IntrinsicOperation::MulNumLR => bin_op!(Mul::mul),
-            IntrinsicOperation::DivNumLR => bin_op!(Div::div),
-            IntrinsicOperation::RemNumLR => bin_op!(Rem::rem),
-            IntrinsicOperation::PowNumLR => bin_op!(f64::powf),
-            IntrinsicOperation::GtNumLR => bin_op_to_bool!(>),
-            IntrinsicOperation::GeNumLR => bin_op_to_bool!(>=),
-            IntrinsicOperation::LtNumLR => bin_op_to_bool!(<),
-            IntrinsicOperation::LeNumLR => bin_op_to_bool!(<=),
-            IntrinsicOperation::EqNumLR => bin_op_to_bool!(==),
-            IntrinsicOperation::NeNumLR => bin_op_to_bool!(!=),
-            IntrinsicOperation::BitOrNumLR => bin_op_i64!(|),
-            IntrinsicOperation::BitXorNumLR => bin_op_i64!(^),
-            IntrinsicOperation::BitAndNumLR => bin_op_i64!(&),
-            IntrinsicOperation::BitShlNumLR => bin_op_i64!(<<),
-            IntrinsicOperation::BitShrNumLR => bin_op_i64!(>>),
-            IntrinsicOperation::BitUshrNumLR => bin_op_u64!(>>),
-            IntrinsicOperation::PostfixIncLocalNum => postfix!(+),
-            IntrinsicOperation::PostfixDecLocalNum => postfix!(-),
-            IntrinsicOperation::PrefixIncLocalNum => prefix!(+),
-            IntrinsicOperation::PrefixDecLocalNum => prefix!(-),
-            IntrinsicOperation::GtNumLConstR => bin_op_numl_constr!(>),
-            IntrinsicOperation::GeNumLConstR => bin_op_numl_constr!(>=),
-            IntrinsicOperation::LtNumLConstR => bin_op_numl_constr!(<),
-            IntrinsicOperation::LeNumLConstR => bin_op_numl_constr!(<=),
-            IntrinsicOperation::GtNumLConstR32 => logical_op_numl_u32r_n(cx, |l, r| l > r),
-            IntrinsicOperation::GeNumLConstR32 => logical_op_numl_u32r_n(cx, |l, r| l >= r),
-            IntrinsicOperation::LtNumLConstR32 => logical_op_numl_u32r_n(cx, |l, r| l < r),
-            IntrinsicOperation::LeNumLConstR32 => logical_op_numl_u32r_n(cx, |l, r| l <= r),
-            IntrinsicOperation::Exp => fn_call!(math_exp, sym::Math, sym::exp),
-            IntrinsicOperation::Log2 => fn_call!(math_log2, sym::Math, sym::log2),
-            IntrinsicOperation::Expm1 => fn_call!(math_expm1, sym::Math, sym::expm1),
-            IntrinsicOperation::Cbrt => fn_call!(math_cbrt, sym::Math, sym::cbrt),
-            IntrinsicOperation::Clz32 => fn_call!(math_clz32, sym::Math, sym::clz32),
-            IntrinsicOperation::Atanh => fn_call!(math_atanh, sym::Math, sym::atanh),
-            IntrinsicOperation::Atan2 => fn_call!(math_atan2, sym::Math, sym::atan2),
-            IntrinsicOperation::Round => fn_call!(math_round, sym::Math, sym::round),
-            IntrinsicOperation::Acosh => fn_call!(math_acosh, sym::Math, sym::acosh),
-            IntrinsicOperation::Abs => fn_call!(math_abs, sym::Math, sym::abs),
-            IntrinsicOperation::Sinh => fn_call!(math_sinh, sym::Math, sym::sinh),
-            IntrinsicOperation::Sin => fn_call!(math_sin, sym::Math, sym::sin),
-            IntrinsicOperation::Ceil => fn_call!(math_ceil, sym::Math, sym::ceil),
-            IntrinsicOperation::Tan => fn_call!(math_tan, sym::Math, sym::tan),
-            IntrinsicOperation::Trunc => fn_call!(math_trunc, sym::Math, sym::trunc),
-            IntrinsicOperation::Asinh => fn_call!(math_asinh, sym::Math, sym::asinh),
-            IntrinsicOperation::Log10 => fn_call!(math_log10, sym::Math, sym::log10),
-            IntrinsicOperation::Asin => fn_call!(math_asin, sym::Math, sym::asin),
-            IntrinsicOperation::Random => fn_call!(math_random, sym::Math, sym::random),
-            IntrinsicOperation::Log1p => fn_call!(math_log1p, sym::Math, sym::log1p),
-            IntrinsicOperation::Sqrt => fn_call!(math_sqrt, sym::Math, sym::sqrt),
-            IntrinsicOperation::Atan => fn_call!(math_atan, sym::Math, sym::atan),
-            IntrinsicOperation::Cos => fn_call!(math_cos, sym::Math, sym::cos),
-            IntrinsicOperation::Tanh => fn_call!(math_tanh, sym::Math, sym::tanh),
-            IntrinsicOperation::Log => fn_call!(math_log, sym::Math, sym::log),
-            IntrinsicOperation::Floor => fn_call!(math_floor, sym::Math, sym::floor),
-            IntrinsicOperation::Cosh => fn_call!(math_cosh, sym::Math, sym::cosh),
-            IntrinsicOperation::Acos => fn_call!(math_acos, sym::Math, sym::acos),
+            IntrinsicKind::AddNumLR(left, right) => number_binop_number(left, right, &mut cx.scope, f64::add),
+            IntrinsicKind::SubNumLR(left, right) => number_binop_number(left, right, &mut cx.scope, f64::sub),
+            IntrinsicKind::MulNumLR(left, right) => number_binop_number(left, right, &mut cx.scope, f64::mul),
+            IntrinsicKind::DivNumLR(left, right) => number_binop_number(left, right, &mut cx.scope, f64::div),
+            IntrinsicKind::RemNumLR(left, right) => number_binop_number(left, right, &mut cx.scope, f64::rem),
+            IntrinsicKind::PowNumLR(left, right) => number_binop_number(left, right, &mut cx.scope, f64::powf),
+            IntrinsicKind::GtNumLR(left, right) => number_binop_bool(left, right, &mut cx.scope, |l, r| l > r),
+            IntrinsicKind::GeNumLR(left, right) => number_binop_bool(left, right, &mut cx.scope, |l, r| l >= r),
+            IntrinsicKind::LtNumLR(left, right) => number_binop_bool(left, right, &mut cx.scope, |l, r| l < r),
+            IntrinsicKind::LeNumLR(left, right) => number_binop_bool(left, right, &mut cx.scope, |l, r| l <= r),
+            IntrinsicKind::EqNumLR(left, right) => number_binop_bool(left, right, &mut cx.scope, |l, r| l == r),
+            IntrinsicKind::NeNumLR(left, right) => number_binop_bool(left, right, &mut cx.scope, |l, r| l != r),
+            IntrinsicKind::BitOrNumLR(left, right) => number_binop_i32(left, right, &mut cx.scope, |l, r| l | r),
+            IntrinsicKind::BitXorNumLR(left, right) => number_binop_i32(left, right, &mut cx.scope, |l, r| l ^ r),
+            IntrinsicKind::BitAndNumLR(left, right) => number_binop_i32(left, right, &mut cx.scope, |l, r| l & r),
+            IntrinsicKind::BitShlNumLR(left, right) => number_binop_i32(left, right, &mut cx.scope, |l, r| l << r),
+            IntrinsicKind::BitShrNumLR(left, right) => number_binop_i32(left, right, &mut cx.scope, |l, r| l >> r),
+            IntrinsicKind::BitUshrNumLR(left, right) => number_binop_u32(left, right, &mut cx.scope, |l, r| l >> r),
+            IntrinsicKind::PostfixIncLocalNum(local) => postfix(local, &mut cx, |v| v + 1.0),
+            IntrinsicKind::PostfixDecLocalNum(local) => postfix(local, &mut cx, |v| v - 1.0),
+            IntrinsicKind::PrefixIncLocalNum(local) => prefix(local, &mut cx, |v| v + 1.0),
+            IntrinsicKind::PrefixDecLocalNum(local) => prefix(local, &mut cx, |v| v - 1.0),
+            IntrinsicKind::GtNumLConstR(left, NumberInline8(right))
+            | IntrinsicKind::GtNumLConstR32(left, NumberInline32(right)) => {
+                number_f64_binop_bool(left, right, &mut cx.scope, |l, r| l > r)
+            }
+            IntrinsicKind::GeNumLConstR(left, NumberInline8(right))
+            | IntrinsicKind::GeNumLConstR32(left, NumberInline32(right)) => {
+                number_f64_binop_bool(left, right, &mut cx.scope, |l, r| l >= r)
+            }
+            IntrinsicKind::LtNumLConstR(left, NumberInline8(right))
+            | IntrinsicKind::LtNumLConstR32(left, NumberInline32(right)) => {
+                number_f64_binop_bool(left, right, &mut cx.scope, |l, r| l < r)
+            }
+            IntrinsicKind::LeNumLConstR(left, NumberInline8(right))
+            | IntrinsicKind::LeNumLConstR32(left, NumberInline32(right)) => {
+                number_f64_binop_bool(left, right, &mut cx.scope, |l, r| l <= r)
+            }
+            IntrinsicKind::Exp(call) => fn_call!(call, math_exp, Math.exp),
+            IntrinsicKind::Log2(call) => fn_call!(call, math_log2, Math.log2),
+            IntrinsicKind::Expm1(call) => fn_call!(call, math_expm1, Math.expm1),
+            IntrinsicKind::Cbrt(call) => fn_call!(call, math_cbrt, Math.cbrt),
+            IntrinsicKind::Clz32(call) => fn_call!(call, math_clz32, Math.clz32),
+            IntrinsicKind::Atanh(call) => fn_call!(call, math_atanh, Math.atanh),
+            IntrinsicKind::Atan2(call) => fn_call!(call, math_atan2, Math.atan2),
+            IntrinsicKind::Round(call) => fn_call!(call, math_round, Math.round),
+            IntrinsicKind::Acosh(call) => fn_call!(call, math_acosh, Math.acosh),
+            IntrinsicKind::Abs(call) => fn_call!(call, math_abs, Math.abs),
+            IntrinsicKind::Sinh(call) => fn_call!(call, math_sinh, Math.sinh),
+            IntrinsicKind::Sin(call) => fn_call!(call, math_sin, Math.sin),
+            IntrinsicKind::Ceil(call) => fn_call!(call, math_ceil, Math.ceil),
+            IntrinsicKind::Tan(call) => fn_call!(call, math_tan, Math.tan),
+            IntrinsicKind::Trunc(call) => fn_call!(call, math_trunc, Math.trunc),
+            IntrinsicKind::Asinh(call) => fn_call!(call, math_asinh, Math.asinh),
+            IntrinsicKind::Log10(call) => fn_call!(call, math_log10, Math.log10),
+            IntrinsicKind::Asin(call) => fn_call!(call, math_asin, Math.asin),
+            IntrinsicKind::Random(call) => fn_call!(call, math_random, Math.random),
+            IntrinsicKind::Log1p(call) => fn_call!(call, math_log1p, Math.log1p),
+            IntrinsicKind::Sqrt(call) => fn_call!(call, math_sqrt, Math.sqrt),
+            IntrinsicKind::Atan(call) => fn_call!(call, math_atan, Math.atan),
+            IntrinsicKind::Cos(call) => fn_call!(call, math_cos, Math.cos),
+            IntrinsicKind::Tanh(call) => fn_call!(call, math_tanh, Math.tanh),
+            IntrinsicKind::Log(call) => fn_call!(call, math_log, Math.log),
+            IntrinsicKind::Floor(call) => fn_call!(call, math_floor, Math.floor),
+            IntrinsicKind::Cosh(call) => fn_call!(call, math_cosh, Math.cosh),
+            IntrinsicKind::Acos(call) => fn_call!(call, math_acos, Math.acos),
         }
 
         Ok(None)

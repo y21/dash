@@ -969,10 +969,10 @@ pub enum IntrinsicKind<S: ExtractSource> {
     BitShlNumLR(S::Value, S::Value),
     BitShrNumLR(S::Value, S::Value),
     BitUshrNumLR(S::Value, S::Value),
-    PostfixIncLocalNum(S::Value),
-    PostfixDecLocalNum(S::Value),
-    PrefixIncLocalNum(S::Value),
-    PrefixDecLocalNum(S::Value),
+    PostfixIncLocalNum(BackLocalId),
+    PostfixDecLocalNum(BackLocalId),
+    PrefixIncLocalNum(BackLocalId),
+    PrefixDecLocalNum(BackLocalId),
     GtNumLConstR(S::Value, NumberInline8),
     GeNumLConstR(S::Value, NumberInline8),
     LtNumLConstR(S::Value, NumberInline8),
@@ -1020,81 +1020,216 @@ impl<S: ExtractSource> ExtractBack<S> for IntrinsicOperands<S> {
         let kind = IntrinsicOperation::from_repr(cx.fetch_u8()).unwrap();
 
         let operands = match kind {
-            IntrinsicOperation::AddNumLR => IntrinsicKind::AddNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::SubNumLR => IntrinsicKind::SubNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::MulNumLR => IntrinsicKind::MulNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::DivNumLR => IntrinsicKind::DivNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::RemNumLR => IntrinsicKind::RemNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::PowNumLR => IntrinsicKind::PowNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::GtNumLR => IntrinsicKind::GtNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
+            IntrinsicOperation::AddNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::AddNumLR(left, right)
+            }
+
+            IntrinsicOperation::SubNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::SubNumLR(left, right)
+            }
+
+            IntrinsicOperation::MulNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::MulNumLR(left, right)
+            }
+
+            IntrinsicOperation::DivNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::DivNumLR(left, right)
+            }
+
+            IntrinsicOperation::RemNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::RemNumLR(left, right)
+            }
+
+            IntrinsicOperation::PowNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::PowNumLR(left, right)
+            }
+
+            IntrinsicOperation::GtNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::GtNumLR(left, right)
+            }
+
             IntrinsicOperation::GtNumLConstR => {
                 IntrinsicKind::GtNumLConstR(cx.pop_stack_rooted(), extract_back_infallible(cx))
             }
+
             IntrinsicOperation::GtNumLConstR32 => {
                 IntrinsicKind::GtNumLConstR32(cx.pop_stack_rooted(), extract_back_infallible(cx))
             }
-            IntrinsicOperation::GeNumLR => IntrinsicKind::GeNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
+
+            IntrinsicOperation::GeNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::GeNumLR(left, right)
+            }
+
             IntrinsicOperation::GeNumLConstR => {
                 IntrinsicKind::GeNumLConstR(cx.pop_stack_rooted(), extract_back_infallible(cx))
             }
+
             IntrinsicOperation::GeNumLConstR32 => {
                 IntrinsicKind::GeNumLConstR32(cx.pop_stack_rooted(), extract_back_infallible(cx))
             }
-            IntrinsicOperation::LtNumLR => IntrinsicKind::LtNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
+
+            IntrinsicOperation::LtNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::LtNumLR(left, right)
+            }
+
             IntrinsicOperation::LtNumLConstR => {
                 IntrinsicKind::LtNumLConstR(cx.pop_stack_rooted(), extract_back_infallible(cx))
             }
+
             IntrinsicOperation::LtNumLConstR32 => {
                 IntrinsicKind::LtNumLConstR32(cx.pop_stack_rooted(), extract_back_infallible(cx))
             }
-            IntrinsicOperation::LeNumLR => IntrinsicKind::LeNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
+
+            IntrinsicOperation::LeNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::LeNumLR(left, right)
+            }
+
             IntrinsicOperation::LeNumLConstR => {
                 IntrinsicKind::LeNumLConstR(cx.pop_stack_rooted(), extract_back_infallible(cx))
             }
+
             IntrinsicOperation::LeNumLConstR32 => {
                 IntrinsicKind::LeNumLConstR32(cx.pop_stack_rooted(), extract_back_infallible(cx))
             }
-            IntrinsicOperation::EqNumLR => IntrinsicKind::EqNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::NeNumLR => IntrinsicKind::NeNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::BitOrNumLR => IntrinsicKind::BitOrNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::BitXorNumLR => IntrinsicKind::BitXorNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::BitAndNumLR => IntrinsicKind::BitAndNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::BitShlNumLR => IntrinsicKind::BitShlNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::BitShrNumLR => IntrinsicKind::BitShrNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted()),
-            IntrinsicOperation::BitUshrNumLR => {
-                IntrinsicKind::BitUshrNumLR(cx.pop_stack_rooted(), cx.pop_stack_rooted())
+
+            IntrinsicOperation::EqNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::EqNumLR(left, right)
             }
-            IntrinsicOperation::PostfixIncLocalNum => IntrinsicKind::PostfixIncLocalNum(cx.pop_stack_rooted()),
-            IntrinsicOperation::PostfixDecLocalNum => IntrinsicKind::PostfixDecLocalNum(cx.pop_stack_rooted()),
-            IntrinsicOperation::PrefixIncLocalNum => IntrinsicKind::PrefixIncLocalNum(cx.pop_stack_rooted()),
-            IntrinsicOperation::PrefixDecLocalNum => IntrinsicKind::PrefixDecLocalNum(cx.pop_stack_rooted()),
+
+            IntrinsicOperation::NeNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::NeNumLR(left, right)
+            }
+
+            IntrinsicOperation::BitOrNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::BitOrNumLR(left, right)
+            }
+
+            IntrinsicOperation::BitXorNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::BitXorNumLR(left, right)
+            }
+
+            IntrinsicOperation::BitAndNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::BitAndNumLR(left, right)
+            }
+
+            IntrinsicOperation::BitShlNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::BitShlNumLR(left, right)
+            }
+
+            IntrinsicOperation::BitShrNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::BitShrNumLR(left, right)
+            }
+
+            IntrinsicOperation::BitUshrNumLR => {
+                let right = cx.pop_stack_rooted();
+                let left = cx.pop_stack_rooted();
+                IntrinsicKind::BitUshrNumLR(left, right)
+            }
+
+            IntrinsicOperation::PostfixIncLocalNum => {
+                IntrinsicKind::PostfixIncLocalNum(BackLocalId(cx.fetch_u8() as u16))
+            }
+
+            IntrinsicOperation::PostfixDecLocalNum => {
+                IntrinsicKind::PostfixDecLocalNum(BackLocalId(cx.fetch_u8() as u16))
+            }
+
+            IntrinsicOperation::PrefixIncLocalNum => {
+                IntrinsicKind::PrefixIncLocalNum(BackLocalId(cx.fetch_u8() as u16))
+            }
+
+            IntrinsicOperation::PrefixDecLocalNum => {
+                IntrinsicKind::PrefixDecLocalNum(BackLocalId(cx.fetch_u8() as u16))
+            }
+
             IntrinsicOperation::Exp => IntrinsicKind::Exp(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Log2 => IntrinsicKind::Log2(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Expm1 => IntrinsicKind::Expm1(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Cbrt => IntrinsicKind::Cbrt(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Clz32 => IntrinsicKind::Clz32(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Atanh => IntrinsicKind::Atanh(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Atan2 => IntrinsicKind::Atan2(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Round => IntrinsicKind::Round(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Acosh => IntrinsicKind::Acosh(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Abs => IntrinsicKind::Abs(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Sinh => IntrinsicKind::Sinh(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Sin => IntrinsicKind::Sin(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Ceil => IntrinsicKind::Ceil(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Tan => IntrinsicKind::Tan(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Trunc => IntrinsicKind::Trunc(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Asinh => IntrinsicKind::Asinh(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Log10 => IntrinsicKind::Log10(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Asin => IntrinsicKind::Asin(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Random => IntrinsicKind::Random(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Log1p => IntrinsicKind::Log1p(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Sqrt => IntrinsicKind::Sqrt(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Atan => IntrinsicKind::Atan(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Cos => IntrinsicKind::Cos(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Tanh => IntrinsicKind::Tanh(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Log => IntrinsicKind::Log(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Floor => IntrinsicKind::Floor(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Cosh => IntrinsicKind::Cosh(IntrinsicCallOperands { argc: cx.fetch_u8() }),
+
             IntrinsicOperation::Acos => IntrinsicKind::Acos(IntrinsicCallOperands { argc: cx.fetch_u8() }),
         };
 
