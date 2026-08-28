@@ -1,4 +1,4 @@
-use dash_middle::compiler::constant::{ConstantPool, SymbolConstant};
+use dash_middle::compiler::constant::ConstantPool;
 use dash_middle::compiler::external::ExternalId;
 use dash_middle::compiler::scope::BackLocalId;
 use std::ops::{Deref, DerefMut};
@@ -132,347 +132,34 @@ impl DerefMut for DispatchContext<'_> {
     }
 }
 
-mod extract {
-    use std::convert::Infallible;
-    use std::marker::PhantomData;
-
-    use dash_middle::compiler::constant::{NumberConstant, SymbolConstant};
-    use dash_middle::compiler::scope::BackLocalId;
-    use dash_middle::compiler::{ArrayMemberKind, ExportPropertyKind, FunctionCallKind, ObjectMemberKind};
-    use dash_middle::iterator_with::IteratorWith;
-
-    use crate::gc::ObjectId;
-    use crate::value::object::PropertyValue;
-    use crate::value::ops::conversions::ValueConversion;
-    use crate::value::propertykey::{PropertyKey, ToPropertyKey};
-    use crate::value::string::JsString;
-    use crate::value::{Unpack, Unrooted, Value, ValueKind};
-
-    use super::DispatchContext;
-
-    #[derive(Debug)]
-    pub struct BackwardSequence<T> {
-        index: usize,
-        len: usize,
-        _p: PhantomData<T>,
-    }
-
-    impl<T> BackwardSequence<T> {
-        pub fn new_u16(cx: &mut DispatchContext<'_>) -> Self {
-            let len = cx.fetchw_and_inc_ip();
-            Self {
-                index: 0,
-                len: len as usize,
-                _p: PhantomData,
-            }
-        }
-        pub fn from_len(len: usize) -> Self {
-            Self {
-                index: 0,
-                len,
-                _p: PhantomData,
-            }
-        }
-    }
-
-    /// A sequence with extra capability to go forwards.
-    #[derive(Debug)]
-    pub struct ForwardSequence<T> {
-        back: BackwardSequence<T>,
-        stack_index: usize,
-    }
-
-    impl<T> ForwardSequence<T> {
-        pub fn from_len(cx: &mut DispatchContext<'_>, iter_len: usize, stack_len: usize) -> Self {
-            Self {
-                back: BackwardSequence::from_len(iter_len),
-                stack_index: cx.stack.len() - stack_len,
-            }
-        }
-    }
-
-    impl<'vm, T: ExtractBack> IteratorWith<&mut DispatchContext<'vm>> for BackwardSequence<T> {
-        type Item = Result<T, T::Exception>;
-
-        fn next(&mut self, cx: &mut DispatchContext<'vm>) -> Option<Self::Item> {
-            if self.index == self.len {
-                None
-            } else {
-                let item = T::extract(cx);
-                self.index += 1;
-                Some(item)
-            }
-        }
-    }
-
-    pub trait FrontIteratorWith<Args> {
-        type Item;
-
-        fn next_front(&mut self, args: Args) -> Option<Self::Item>;
-    }
-    impl<'vm, T: ExtractFront> FrontIteratorWith<&mut DispatchContext<'vm>> for ForwardSequence<T> {
-        type Item = Result<T, T::Error>;
-        fn next_front(&mut self, cx: &mut DispatchContext<'vm>) -> Option<Self::Item> {
-            if self.back.index == self.back.len {
-                None
-            } else {
-                let item = T::extract_front(self, cx);
-                self.back.index += 1;
-                Some(item)
-            }
-        }
-    }
-
-    pub trait ExtractBack: Sized {
-        /// A note on errors: even though quite often errors are technically possible in implementations,
-        /// we'll still use `Infallible`, because they're relying on bytecode invariants
-        /// that, if they fail, indicate a bug elsewhere so there is no point in
-        /// considering them errors that need to be handled.
-        ///
-        /// JS Exceptions on the other hand use `type Error = Value;` because they must be propagated
-        type Exception;
-
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception>;
-    }
-
-    pub trait ExtractFront: Sized {
-        type Error;
-
-        /// Extracts the value from the "front", as opposed to popping it off the back.
-        /// The implementation is allowed to reorder the stack (e.g. via `swap_remove`)
-        /// insofar everything behind the sequence is unaffected.
-        fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error>;
-    }
-
-    pub struct IdentW(pub JsString);
-
-    impl ExtractBack for IdentW {
-        type Exception = Infallible;
-
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            let id = cx.fetchw_and_inc_ip();
-            Ok(Self(cx.constants().symbols[SymbolConstant(id)].into()))
-        }
-    }
-
-    pub struct NumberWConstant(pub f64);
-
-    impl ExtractBack for NumberWConstant {
-        type Exception = Infallible;
-
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            let id = cx.fetchw_and_inc_ip();
-            Ok(Self(cx.constants().numbers[NumberConstant(id)]))
-        }
-    }
-
-    pub struct Object(pub ObjectId);
-    impl ExtractBack for Object {
-        type Exception = Infallible;
-
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            match cx.pop_stack_rooted().unpack() {
-                ValueKind::Object(o) => Ok(Self(o)),
-                _ => panic!("stack top must contain an object"),
-            }
-        }
-    }
-
-    impl ExtractFront for Object {
-        type Error = Infallible;
-
-        fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error> {
-            let value: Value = extract_front(seq, cx);
-            match value.unpack() {
-                ValueKind::Object(o) => Ok(Self(o)),
-                _ => panic!("stack top must contain an object"),
-            }
-        }
-    }
-
-    impl ExtractBack for ObjectMemberKind {
-        type Exception = Infallible;
-
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            Ok(ObjectMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap())
-        }
-    }
-
-    impl ExtractBack for Value {
-        type Exception = Infallible;
-
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            Ok(cx.pop_stack_rooted())
-        }
-    }
-    impl ExtractFront for Value {
-        type Error = Infallible;
-
-        fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error> {
-            seq.stack_index += 1;
-            let value = cx.stack[seq.stack_index - 1];
-            cx.scope.add(value);
-            Ok(value)
-        }
-    }
-
-    impl ExtractBack for bool {
-        type Exception = Infallible;
-
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            Ok(cx.fetch_and_inc_ip() == 1)
-        }
-    }
-
-    /// Convenience function for infallibly extracting a `T`
-    pub fn extract<T: ExtractBack<Exception = Infallible>>(cx: &mut DispatchContext<'_>) -> T {
-        match T::extract(cx) {
-            Ok(v) => v,
-        }
-    }
-
-    /// Convenience function for infallibly extracting a `T`
-    pub fn extract_front<T: ExtractFront<Error = Infallible>, U>(
-        seq: &mut ForwardSequence<U>,
-        cx: &mut DispatchContext<'_>,
-    ) -> T {
-        match T::extract_front(seq, cx) {
-            Ok(v) => v,
-        }
-    }
-
-    macro_rules! tupl_impl {
-        ($($($param:ident)*),*) => {
-            $(
-                impl<E $(, $param : ExtractBack<Exception = E>)*> ExtractBack for ($($param),*) {
-                    type Exception = E;
-
-                    fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-                        Ok((
-                            $(
-                                <$param>::extract(cx)?
-                            ),*
-                        ))
-                    }
-                }
-            )*
-        };
-    }
-    tupl_impl! {
-        A B,
-        A B C
-    }
-
-    #[derive(Debug)]
-    pub enum ArrayElement {
-        Single(Value),
-        Spread(Value, usize),
-        Hole(u32),
-    }
-
-    impl ExtractFront for ArrayElement {
-        type Error = Value;
-
-        fn extract_front<U>(seq: &mut ForwardSequence<U>, cx: &mut DispatchContext<'_>) -> Result<Self, Self::Error> {
-            Ok(match extract::<ArrayMemberKind>(cx) {
-                ArrayMemberKind::Item => ArrayElement::Single(extract_front(seq, cx)),
-                ArrayMemberKind::Spread => {
-                    let value: Value = extract_front(seq, cx);
-                    // TODO: make this work for array-like values, not just arrays, by calling @@iterator on it
-                    let len = value.length_of_array_like(&mut cx.scope)?;
-                    ArrayElement::Spread(value, len)
-                }
-                ArrayMemberKind::Empty => {
-                    let count = cx.fetch_and_inc_ip();
-                    ArrayElement::Hole(count.into())
-                }
-            })
-        }
-    }
-
-    impl ExtractBack for ArrayMemberKind {
-        type Exception = Infallible;
-
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            Ok(ArrayMemberKind::from_repr(cx.fetch_and_inc_ip()).unwrap())
-        }
-    }
-
-    pub struct LocalW(pub Value);
-    impl ExtractBack for LocalW {
-        type Exception = Infallible;
-
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            let local_id = cx.fetchw_and_inc_ip();
-            Ok(Self(cx.get_local(BackLocalId(local_id))))
-        }
-    }
-
-    impl ExtractBack for ExportPropertyKind {
-        type Exception = Infallible;
-
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            Ok(Self::from_repr(cx.fetch_and_inc_ip()).unwrap())
-        }
-    }
-
-    impl<E, T: ExtractBack<Exception = E>> ExtractBack for Option<T> {
-        type Exception = E;
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            match cx.fetch_and_inc_ip() {
-                0 => Ok(None),
-                1 => Ok(Some(T::extract(cx)?)),
-                _ => unreachable!(),
-            }
-        }
-    }
-
-    impl ExtractBack for u16 {
-        type Exception = Infallible;
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            Ok(cx.fetchw_and_inc_ip())
-        }
-    }
-
-    impl ExtractBack for FunctionCallKind {
-        type Exception = Infallible;
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            Ok(Self::from_repr(cx.fetch_and_inc_ip()).unwrap())
-        }
-    }
-}
-
 mod handlers {
+    use dash_middle::compiler::FunctionCallKind;
     use dash_middle::compiler::constant::FunctionConstant;
     use dash_middle::compiler::external::{External, PossiblyExternalId};
-    use dash_middle::compiler::extract::{BackwardSequence, extract_back_infallible};
-    use dash_middle::compiler::instruction::Instruction::CallForInIterator;
-    use dash_middle::compiler::instruction::{AssignKind as AssignKind2, IntrinsicOperation};
+    use dash_middle::compiler::extract::{ForwardSequence, extract_back_infallible};
     use dash_middle::compiler::operands::{
-        AddOperands, ArrayDestructuringMember, ArrayDestructuringOperands, ArrayLiteralOperands, AssignKind,
-        AssignPropertiesOperands, AwaitOperands, BinaryOperator, BindThisOperands, BitandOperands, BitnotOperands,
-        BitorOperands, BitshlOperands, BitshrOperands, BitushrOperands, BitxorOperands, BooleanConstantOperands,
-        BooleanConstantWide, CallOperands, CallSymbolIteratorOperands, ConditionalJumpNoPopOperands,
-        ConditionalJumpPopOperands, DelayedRetOperands, DeletePropertyDynamicOperands, DeletePropertyStaticOperands,
-        DivOperands, DynamicPropertyAccessOperands, DynamicPropertyAssignOperands, EqOperands, ExportDefaultOperands,
-        ExportNamedOperands, ExportProperty, FinallyEndOperands, ForInIteratorOperands, FunctionConstantOperands,
-        GeOperands, GtOperands, ImportDynOperands, ImportStaticOperands, InstanceofOperands, IntrinsicCallOperands,
-        IntrinsicKind, IntrinsicOperands, JmpFalseNoPopOperands, JmpFalsePopOperands, JmpNullishNoPopOperands,
-        JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands,
-        JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands, LdLocalOperands, LeOperands, LtOperands,
-        MulOperands, NeOperands, NegOperands, NotOperands, NumberConstantOperands, NumberConstantWide, NumberInline8,
-        NumberInline32, ObjectDestructuringMember, ObjectDestructuringOperands, ObjectInOperands,
-        ObjectLiteralOperands, ObjectProperty, OptionDiscriminatedByte, OptionNoneMax, PopOperands, PosOperands,
-        PowOperands, RegexConstantOperands, RemOperands, RetOperands, StaticPropertyAccessOperands,
-        StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalExtOperands, StoreLocalOperands, StrictEqOperands,
-        StrictNeOperands, StringConstantOperands, SubOperands, SymbolConstantWide, ThrowOperands, TryCatchDepth,
-        TypeofIdentOperands, TypeofOperands, YieldOperands,
+        AddOperands, ArrayDestructuringMember, ArrayDestructuringOperands, ArrayLiteralElement, ArrayLiteralOperands,
+        AssignKind, AssignPropertiesOperands, AwaitOperands, BinaryOperator, BindThisOperands, BitandOperands,
+        BitnotOperands, BitorOperands, BitshlOperands, BitshrOperands, BitushrOperands, BitxorOperands,
+        BooleanConstantOperands, BooleanConstantWide, CallOperands, CallSymbolIteratorOperands,
+        ConditionalJumpNoPopOperands, ConditionalJumpPopOperands, DelayedRetOperands, DeletePropertyDynamicOperands,
+        DeletePropertyStaticOperands, DivOperands, DynamicPropertyAccessOperands, DynamicPropertyAssignOperands,
+        EqOperands, ExportDefaultOperands, ExportNamedOperands, ExportProperty, FinallyEndOperands,
+        ForInIteratorOperands, FunctionConstantOperands, GeOperands, GtOperands, ImportDynOperands,
+        ImportStaticOperands, InstanceofOperands, IntrinsicCallOperands, IntrinsicKind, IntrinsicOperands,
+        JmpFalseNoPopOperands, JmpFalsePopOperands, JmpNullishNoPopOperands, JmpNullishPopOperands, JmpOperands,
+        JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands, JmpUndefinedPopOperands, LdGlobalOperands,
+        LdLocalExtOperands, LdLocalOperands, LeOperands, LtOperands, MulOperands, NeOperands, NegOperands, NotOperands,
+        NumberConstantOperands, NumberConstantWide, NumberInline8, NumberInline32, ObjectDestructuringMember,
+        ObjectDestructuringOperands, ObjectInOperands, ObjectLiteralOperands, ObjectProperty, OptionDiscriminatedByte,
+        OptionNoneMax, PopOperands, PosOperands, PowOperands, RegexConstantOperands, RemOperands, RetOperands,
+        StaticPropertyAccessOperands, StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalExtOperands,
+        StoreLocalOperands, StrictEqOperands, StrictNeOperands, StringConstantOperands, SubOperands,
+        SymbolConstantWide, ThrowOperands, TryCatchDepth, TypeofIdentOperands, TypeofOperands, YieldOperands,
     };
-    use dash_middle::compiler::{FunctionCallKind, StaticImportKind};
     use dash_middle::interner::{Symbol, sym};
     use dash_middle::iterator_with::{InfallibleIteratorWith, IteratorWith};
     use dash_middle::parser::statement::{Asyncness, FunctionKind as ParserFunctionKind};
-    use handlers::extract::{ForwardSequence, FrontIteratorWith, extract};
     use if_chain::if_chain;
     use smallvec::SmallVec;
     use std::convert::Infallible;
@@ -482,7 +169,7 @@ mod handlers {
     use crate::frame::{FrameState, Ip, Sp, TryBlock};
     use crate::gc::ObjectId;
     use crate::throw;
-    use crate::util::{likely, unlikely};
+    use crate::util::likely;
     use crate::value::array::table::ArrayTable;
     use crate::value::array::{Array, ArrayIterator};
     use crate::value::function::args::CallArgs;
@@ -491,15 +178,12 @@ mod handlers {
     use crate::value::function::generator::GeneratorFunction;
     use crate::value::function::user::UserFunction;
     use crate::value::function::{Function, FunctionKind, adjust_stack_from_flat_call, this_for_new_target};
-    use crate::value::object::{Object, OrdObject, OwnKeysMode, PropertyValue, PropertyValueKind, This, ThisKind};
+    use crate::value::object::{Object, OrdObject, OwnKeysMode, PropertyValue, This, ThisKind};
     use crate::value::ops::conversions::ValueConversion;
     use crate::value::ops::equality;
-    use crate::value::primitive::Number;
     use crate::value::propertykey::{PropertyKey, ToPropertyKey};
     use crate::value::regex::RegExp;
     use crate::value::{Unpack, ValueKind};
-
-    use self::extract::{ArrayElement, IdentW, NumberWConstant};
 
     use super::*;
 
@@ -508,7 +192,7 @@ mod handlers {
 
         fn extract_front<U>(
             cx: &mut DispatchContext<'_>,
-            seq: &mut dash_middle::compiler::extract::ForwardSequence<U>,
+            seq: &mut ForwardSequence<U>,
         ) -> Result<Self, Self::Exception> {
             let index = seq.next_stack_index();
             let value = cx.stack[index];
@@ -1483,36 +1167,38 @@ mod handlers {
         cx: &mut DispatchContext<'_>,
         len: usize,
         stack_values: usize,
-        mut fun: impl FnMut(ArrayElement),
+        mut fun: impl FnMut(ArrayLiteralElement<DispatchContext<'_>>),
     ) -> Result<(), Unrooted> {
-        let mut iter = ForwardSequence::<ArrayElement>::from_len(cx, len, stack_values);
-        while let Some(element) = iter.next_front(cx) {
-            match element? {
-                ArrayElement::Single(value) => fun(ArrayElement::Single(value)),
-                ArrayElement::Spread(source, len) => {
+        let mut iter =
+            ForwardSequence::<ArrayLiteralElement<DispatchContext<'_>>>::from_stack_count_len(cx, stack_values, len);
+        while let Some(element) = iter.next_infallible(cx) {
+            match element {
+                ArrayLiteralElement::Single(value) => fun(ArrayLiteralElement::Single(value)),
+                ArrayLiteralElement::Spread(source) => {
+                    let len = source.length_of_array_like(&mut cx.scope)?;
                     for i in 0..len {
                         let value = source
                             .get_property(i.to_key(&mut cx.scope), &mut cx.scope)?
                             .root(&mut cx.scope);
-                        fun(ArrayElement::Single(value));
+                        fun(ArrayLiteralElement::Single(value));
                     }
                 }
-                ArrayElement::Hole(count) => fun(ArrayElement::Hole(count)),
+                ArrayLiteralElement::Hole(count) => fun(ArrayLiteralElement::Hole(count)),
             }
         }
         let truncate_to = cx.stack.len() - stack_values;
         cx.stack.truncate(truncate_to);
 
-        debug_assert!(iter.next_front(cx).is_none());
+        debug_assert!(iter.next_infallible(cx).is_none());
         Ok(())
     }
 
     fn arraylit_holey(cx: &mut DispatchContext<'_>, len: usize, stack_values: usize) -> Result<Array, Unrooted> {
         let mut table = ArrayTable::new();
         with_arraylit_elements(cx, len, stack_values, |element| match element {
-            ArrayElement::Single(value) => table.push(PropertyValue::static_default(value)),
-            ArrayElement::Hole(hole) => table.resize(table.len() + hole),
-            ArrayElement::Spread(..) => unreachable!(),
+            ArrayLiteralElement::Single(value) => table.push(PropertyValue::static_default(value)),
+            ArrayLiteralElement::Hole(hole) => table.resize(table.len() + hole),
+            ArrayLiteralElement::Spread(..) => unreachable!(),
         })?;
         Ok(Array::from_table(&cx.scope, table))
     }
@@ -1521,8 +1207,8 @@ mod handlers {
         // Dense implies len == stack_values
         let mut new_elements = Vec::with_capacity(len);
         with_arraylit_elements(cx, len, len, |element| match element {
-            ArrayElement::Single(value) => new_elements.push(PropertyValue::static_default(value)),
-            ArrayElement::Spread(..) | ArrayElement::Hole(_) => unreachable!(),
+            ArrayLiteralElement::Single(value) => new_elements.push(PropertyValue::static_default(value)),
+            ArrayLiteralElement::Spread(..) | ArrayLiteralElement::Hole(_) => unreachable!(),
         })?;
         Ok(Array::from_vec(new_elements, &cx.scope))
     }
@@ -1927,7 +1613,7 @@ mod handlers {
 
     pub fn try_block(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let mut compute_dist_ip = || {
-            let distance = extract::<Option<u16>>(&mut cx)?;
+            let distance = extract_back_infallible::<_, OptionDiscriminatedByte<u16>>(&mut cx).0?;
             let ip = cx.frames.current_ip();
             Some(ip + distance as u32)
         };

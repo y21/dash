@@ -140,10 +140,6 @@ impl FrameStack {
         u16::from_ne_bytes(self.fetch_n_and_inc_ip::<2>())
     }
 
-    pub fn fetch32_and_inc_ip(&mut self) -> u32 {
-        u32::from_ne_bytes(self.fetch_n_and_inc_ip::<4>())
-    }
-
     pub fn pop(&mut self) -> Frame {
         let extended = self.extended.pop().expect("no active frame");
         let base = self.pop_base();

@@ -10,7 +10,7 @@ use crate::compiler::extract::{
 };
 use crate::compiler::instruction::IntrinsicOperation;
 use crate::compiler::scope::BackLocalId;
-use crate::compiler::{ExportPropertyKind, FunctionCallKind, ObjectMemberKind, StaticImportKind};
+use crate::compiler::{ArrayMemberKind, ExportPropertyKind, FunctionCallKind, ObjectMemberKind, StaticImportKind};
 use crate::interner::Symbol;
 
 // HELPERS
@@ -677,6 +677,32 @@ impl<S: ExtractSource> ExtractFront<S> for ObjectProperty<S> {
                 Self::Dynamic { key, value }
             }
             ObjectMemberKind::Spread => Self::Spread(extract_front_infallible(source, seq)),
+        })
+    }
+}
+
+impl<S: ExtractSource> ExtractBack<S> for ArrayMemberKind {
+    type Exception = Infallible;
+
+    fn extract_back(source: &mut S) -> Result<Self, Self::Exception> {
+        Ok(ArrayMemberKind::from_repr(source.fetch_u8()).unwrap())
+    }
+}
+
+pub enum ArrayLiteralElement<S: ExtractSource> {
+    Single(S::Value),
+    Spread(S::Value),
+    Hole(u32),
+}
+
+impl<S: ExtractSource> ExtractFront<S> for ArrayLiteralElement<S> {
+    type Exception = Infallible;
+
+    fn extract_front<U>(cx: &mut S, seq: &mut ForwardSequence<U>) -> Result<Self, Self::Exception> {
+        Ok(match extract_back_infallible(cx) {
+            ArrayMemberKind::Item => ArrayLiteralElement::Single(extract_front_infallible(cx, seq)),
+            ArrayMemberKind::Spread => ArrayLiteralElement::Spread(extract_front_infallible(cx, seq)),
+            ArrayMemberKind::Empty => ArrayLiteralElement::Hole(cx.fetch_u8().into()),
         })
     }
 }
