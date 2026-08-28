@@ -163,3 +163,19 @@ impl<S: ExtractSource, T: ExtractFront<S>> IteratorWith<&mut S> for ForwardSeque
         }
     }
 }
+
+impl<S: ExtractSource> ExtractBack<S> for () {
+    type Exception = Infallible;
+
+    fn extract_back(_: &mut S) -> Result<Self, Self::Exception> {
+        Ok(())
+    }
+}
+
+impl<S: ExtractSource> ExtractFront<S> for () {
+    type Exception = Infallible;
+
+    fn extract_front<U>(_: &mut S, _: &mut ForwardSequence<U>) -> Result<Self, Self::Exception> {
+        Ok(())
+    }
+}

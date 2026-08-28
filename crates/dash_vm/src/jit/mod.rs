@@ -1,7 +1,13 @@
 use std::mem::{MaybeUninit, offset_of};
 use std::rc::Rc;
 
-use dash_middle::compiler::instruction::{Instruction, IntrinsicOperation};
+use dash_middle::compiler::constant::ConstantPool;
+use dash_middle::compiler::extract::{ExtractSource, extract_back_infallible};
+use dash_middle::compiler::instruction::Instruction;
+use dash_middle::compiler::operands::{
+    ConditionalJumpPopOperands, IntrinsicOperands, JmpFalsePopOperands, LdLocalOperands, LoopBackjumpOperands,
+    PopOperands,
+};
 
 use crate::Vm;
 use crate::dispatch::{DispatchContext, INSTRUCTION_LUT};
@@ -119,6 +125,56 @@ struct JitOutData {
     ip: u32,
 }
 
+struct JitExtractContext<'a, 'vm> {
+    bytes: &'a [u8],
+    ip: usize,
+    scope: &'a LocalScope<'vm>,
+}
+
+impl<'a, 'vm> ExtractSource for JitExtractContext<'a, 'vm> {
+    type Value = ();
+
+    type Unrooted = ();
+
+    fn fetch_bytes<const N: usize>(&mut self) -> [u8; N] {
+        let bytes = self.bytes[self.ip..self.ip + N].try_into().unwrap();
+        self.ip += N;
+        bytes
+    }
+
+    fn constants(&self) -> &ConstantPool {
+        &self.scope.frames.current_fn().constants
+    }
+
+    fn stack_len(&self) -> usize {
+        0
+    }
+
+    fn pop_stack_rooted(&mut self) -> Self::Value {}
+
+    fn pop_stack(&mut self) -> Self::Unrooted {}
+
+    fn peek_stack_rooted(&mut self) -> Self::Value {}
+
+    fn peek_stack(&self) -> Self::Unrooted {}
+
+    fn truncate_stack(&mut self, _: usize) {}
+}
+
+impl Iterator for JitExtractContext<'_, '_> {
+    type Item = (Ip, Instruction);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.ip < self.bytes.len() {
+            let byte = self.bytes[self.ip];
+            self.ip += 1;
+            Some((Ip((self.ip - 1) as u32), Instruction::from_repr(byte).unwrap()))
+        } else {
+            None
+        }
+    }
+}
+
 fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
     scope.frames.with_current_bytecode(|bytecode| {
         fn target_from_relative(next_bc_ip: u32, rel: i16) -> Ip {
@@ -163,21 +219,22 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
             x86.jne_internal_label(InternalLabel::StubStatusHandler);
         }
 
-        let mut i = 0;
-        while i < bytecode.len() {
-            x86.mark_bytecode_ip(Ip(i as u32));
-
-            let instr = Instruction::from_repr(bytecode[i]).unwrap();
-            i += 1;
+        let mut cx = JitExtractContext {
+            bytes: bytecode,
+            ip: 0,
+            scope,
+        };
+        while let Some((instr_ip, instr)) = cx.next() {
+            x86.mark_bytecode_ip(instr_ip);
 
             // IP for the operands *in the full bytecode* of the function (not the sliced loop bytecode).
-            let operands_absolute_ip = start.0 + i as u32;
+            let operands_absolute_ip = start.0 + cx.ip as u32;
 
             match instr {
                 Instruction::JmpFalseP => {
-                    let target_rel = i16::from_le_bytes([bytecode[i], bytecode[i + 1]]);
-                    i += 2;
-                    let target_bc_ip = target_from_relative(i as u32, target_rel);
+                    let JmpFalsePopOperands(ConditionalJumpPopOperands { offset, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    let target_bc_ip = target_from_relative(cx.ip as u32, offset);
 
                     x86.mov_reg_mem_u8(
                         x86::Register::Rax,
@@ -191,42 +248,31 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
                     x86.jne_bytecode_ip(target_bc_ip);
                 }
                 Instruction::LoopBackJmp => {
-                    let target_rel = i16::from_le_bytes([bytecode[i + 1], bytecode[i + 2]]);
-                    i += 3;
-                    let target_bc_ip = target_from_relative(i as u32, target_rel);
+                    let LoopBackjumpOperands { offset, hotness: _ } = extract_back_infallible(&mut cx);
+                    let target_bc_ip = target_from_relative(cx.ip as u32, offset);
 
                     x86.jmp_bytecode_ip(target_bc_ip);
                 }
                 Instruction::IntrinsicOp => {
-                    let intrinsic = IntrinsicOperation::from_repr(bytecode[i]).unwrap();
-                    i += 1;
-                    match intrinsic {
-                        IntrinsicOperation::LtNumLConstR | IntrinsicOperation::PostfixIncLocalNum => {
-                            i += 1;
-                            emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
-                        }
-                        IntrinsicOperation::LtNumLConstR32 => {
-                            i += 4;
-                            emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
-                        }
-                        _ => todo!(),
-                    }
+                    let IntrinsicOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::LdLocal => {
-                    i += 2;
+                    let LdLocalOperands(_) = extract_back_infallible(&mut cx);
                     emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::Pop => {
+                    let PopOperands(_) = extract_back_infallible(&mut cx);
                     emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
-                other => todo!("{other:?} @ {i:x}"),
+                other => todo!("{other:?} @ {:x?}", cx.ip),
             }
         }
 
         // Exit branch (end-of-loop/end-of-bytecode)
-        assert!(i == bytecode.len());
-        assert!(start.0 + i as u32 == end.0);
-        x86.mark_bytecode_ip(Ip(i as u32));
+        assert!(cx.ip == bytecode.len());
+        assert!(start.0 + cx.ip as u32 == end.0);
+        x86.mark_bytecode_ip(Ip(cx.ip as u32));
         x86.mov_reg_mem_u8(x86::Register::Rax, x86::Register::Rbp, -OUT_DATA_RBP_OFFSET);
         x86.move_mem_imm32(
             x86::Register::Rax,
