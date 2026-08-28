@@ -460,11 +460,12 @@ mod handlers {
         JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands,
         JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands, LdLocalOperands, LeOperands, LtOperands,
         MulOperands, NeOperands, NegOperands, NotOperands, NumberConstantOperands, NumberConstantWide,
-        ObjectInOperands, ObjectLiteralOperands, ObjectProperty, PopOperands, PosOperands, PowOperands,
-        RegexConstantOperands, RemOperands, RetOperands, StaticPropertyAccessOperands, StaticPropertyAssignOperands,
-        StoreGlobalOperands, StoreLocalExtOperands, StoreLocalOperands, StrictEqOperands, StrictNeOperands,
-        StringConstantOperands, SubOperands, SymbolConstantWide, ThrowOperands, TryCatchDepth, TypeofIdentOperands,
-        TypeofOperands, YieldOperands,
+        ObjectDestructuringMember, ObjectDestructuringOperands, ObjectInOperands, ObjectLiteralOperands,
+        ObjectProperty, OptionNoneMax, PopOperands, PosOperands, PowOperands, RegexConstantOperands, RemOperands,
+        RetOperands, StaticPropertyAccessOperands, StaticPropertyAssignOperands, StoreGlobalOperands,
+        StoreLocalExtOperands, StoreLocalOperands, StrictEqOperands, StrictNeOperands, StringConstantOperands,
+        SubOperands, SymbolConstantWide, ThrowOperands, TryCatchDepth, TypeofIdentOperands, TypeofOperands,
+        YieldOperands,
     };
     use dash_middle::compiler::{FunctionCallKind, StaticImportKind};
     use dash_middle::interner::{Symbol, sym};
@@ -2145,22 +2146,27 @@ mod handlers {
     }
 
     pub fn objdestruct(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let rest_id = match cx.fetchw_and_inc_ip() {
-            u16::MAX => None,
-            n => Some(BackLocalId(n)),
-        };
-        let obj = cx.pop_stack_rooted();
+        let ObjectDestructuringOperands {
+            target,
+            mut members,
+            rest_local_id: OptionNoneMax(rest_local_id),
+        } = extract_back_infallible(&mut cx);
 
-        let mut idents = Vec::new();
+        let mut idents = Vec::<JsString>::new();
 
-        let mut iter = BackwardSequence::<(bool, NumberWConstant, IdentW)>::new_u16(&mut cx);
-        while let Some((has_default, NumberWConstant(id), IdentW(ident))) = iter.next_infallible(&mut cx) {
-            if rest_id.is_some() {
-                idents.push(ident);
+        // let mut iter = BackwardSequence::<(bool, NumberWConstant, IdentW)>::new_u16(&mut cx);
+        while let Some(ObjectDestructuringMember {
+            has_default,
+            id: NumberConstantWide(id),
+            key: SymbolConstantWide(key),
+        }) = members.next_infallible(&mut cx)
+        {
+            if rest_local_id.is_some() {
+                idents.push(key.into());
             }
 
-            let mut prop = obj
-                .get_property(ident.to_key(&mut cx.scope), &mut cx.scope)?
+            let mut prop = target
+                .get_property(key.to_key(&mut cx.scope), &mut cx.scope)?
                 .root(&mut cx.scope);
             if has_default {
                 // NB: we need to at least pop it from the stack even if the property exists
@@ -2172,8 +2178,8 @@ mod handlers {
             cx.set_local(BackLocalId(id as u16), prop.into());
         }
 
-        if let Some(rest_id) = rest_id {
-            let keys = obj
+        if let Some(rest_id) = rest_local_id {
+            let keys = target
                 .own_keys(&mut cx.scope, OwnKeysMode::OnlyEnumerable)?
                 .into_iter()
                 .filter_map(|s| match s.unpack() {
@@ -2185,14 +2191,9 @@ mod handlers {
             let rest = OrdObject::new(&cx.scope);
             let rest = cx.scope.register(rest);
             for key in keys {
-                let value = obj
-                    .get_property(key.to_key(&mut cx.scope), &mut cx.scope)?
-                    .root(&mut cx.scope);
-                rest.set_property(
-                    key.to_key(&mut cx.scope),
-                    PropertyValue::static_default(value),
-                    &mut cx.scope,
-                )?;
+                let key = key.to_key(&mut cx.scope);
+                let value = target.get_property(key, &mut cx.scope)?.root(&mut cx.scope);
+                rest.set_property(key, PropertyValue::static_default(value), &mut cx.scope)?;
             }
 
             cx.set_local(rest_id.into(), Value::object(rest).into());
