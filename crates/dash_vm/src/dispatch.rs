@@ -416,26 +416,6 @@ mod extract {
         }
     }
 
-    pub struct ExportProperty(pub Unrooted, pub JsString);
-    impl ExtractBack for ExportProperty {
-        type Exception = Unrooted;
-
-        fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
-            Ok(match extract(cx) {
-                ExportPropertyKind::Local => {
-                    let local = extract::<LocalW>(cx);
-                    let ident = extract::<IdentW>(cx);
-                    Self(local.0.into(), ident.0)
-                }
-                ExportPropertyKind::Global => {
-                    let ident = extract::<IdentW>(cx).0;
-                    let value = cx.global().get_property(ident.to_key(&mut cx.scope), &mut cx.scope)?;
-                    Self(value, ident)
-                }
-            })
-        }
-    }
-
     impl<E, T: ExtractBack<Exception = E>> ExtractBack for Option<T> {
         type Exception = E;
         fn extract(cx: &mut DispatchContext<'_>) -> Result<Self, Self::Exception> {
@@ -466,20 +446,25 @@ mod handlers {
     use dash_middle::compiler::constant::FunctionConstant;
     use dash_middle::compiler::external::{External, PossiblyExternalId};
     use dash_middle::compiler::extract::extract_back_infallible;
+    use dash_middle::compiler::instruction::Instruction::CallForInIterator;
     use dash_middle::compiler::instruction::{AssignKind as AssignKind2, IntrinsicOperation};
     use dash_middle::compiler::operands::{
-        AddOperands, ArrayLiteralOperands, AssignKind, AssignPropertiesOperands, BinaryOperator, BitandOperands,
-        BitnotOperands, BitorOperands, BitshlOperands, BitshrOperands, BitushrOperands, BitxorOperands,
-        BooleanConstantOperands, BooleanConstantWide, CallOperands, ConditionalJumpNoPopOperands,
-        ConditionalJumpPopOperands, DelayedRetOperands, DivOperands, DynamicPropertyAssignOperands, EqOperands,
-        FinallyEndOperands, FunctionConstantOperands, GeOperands, GtOperands, InstanceofOperands,
-        JmpFalseNoPopOperands, JmpFalsePopOperands, JmpNullishNoPopOperands, JmpNullishPopOperands, JmpOperands,
-        JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands, JmpUndefinedPopOperands, LdGlobalOperands,
-        LdLocalOperands, LeOperands, LtOperands, MulOperands, NeOperands, NegOperands, NotOperands,
-        NumberConstantOperands, NumberConstantWide, ObjectInOperands, ObjectLiteralOperands, ObjectProperty,
-        PopOperands, PosOperands, PowOperands, RegexConstantOperands, RemOperands, RetOperands,
-        StaticPropertyAccessOperands, StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalOperands,
-        StrictEqOperands, StrictNeOperands, StringConstantOperands, SubOperands, SymbolConstantWide, TryCatchDepth,
+        AddOperands, ArrayLiteralOperands, AssignKind, AssignPropertiesOperands, AwaitOperands, BinaryOperator,
+        BindThisOperands, BitandOperands, BitnotOperands, BitorOperands, BitshlOperands, BitshrOperands,
+        BitushrOperands, BitxorOperands, BooleanConstantOperands, BooleanConstantWide, CallOperands,
+        CallSymbolIteratorOperands, ConditionalJumpNoPopOperands, ConditionalJumpPopOperands, DelayedRetOperands,
+        DeletePropertyDynamicOperands, DeletePropertyStaticOperands, DivOperands, DynamicPropertyAccessOperands,
+        DynamicPropertyAssignOperands, EqOperands, ExportDefaultOperands, ExportNamedOperands, ExportProperty,
+        FinallyEndOperands, ForInIteratorOperands, FunctionConstantOperands, GeOperands, GtOperands, ImportDynOperands,
+        ImportStaticOperands, InstanceofOperands, JmpFalseNoPopOperands, JmpFalsePopOperands, JmpNullishNoPopOperands,
+        JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands,
+        JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands, LdLocalOperands, LeOperands, LtOperands,
+        MulOperands, NeOperands, NegOperands, NotOperands, NumberConstantOperands, NumberConstantWide,
+        ObjectInOperands, ObjectLiteralOperands, ObjectProperty, PopOperands, PosOperands, PowOperands,
+        RegexConstantOperands, RemOperands, RetOperands, StaticPropertyAccessOperands, StaticPropertyAssignOperands,
+        StoreGlobalOperands, StoreLocalExtOperands, StoreLocalOperands, StrictEqOperands, StrictNeOperands,
+        StringConstantOperands, SubOperands, SymbolConstantWide, ThrowOperands, TryCatchDepth, TypeofIdentOperands,
+        TypeofOperands, YieldOperands,
     };
     use dash_middle::compiler::{FunctionCallKind, StaticImportKind};
     use dash_middle::interner::{Symbol, sym};
@@ -511,7 +496,7 @@ mod handlers {
     use crate::value::regex::RegExp;
     use crate::value::{Unpack, ValueKind};
 
-    use self::extract::{ArrayElement, BackwardSequence, ExportProperty, IdentW, NumberWConstant};
+    use self::extract::{ArrayElement, BackwardSequence, IdentW, NumberWConstant};
 
     use super::*;
 
@@ -1838,15 +1823,7 @@ mod handlers {
     }
 
     pub fn dynamicpropertyaccess(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let key = cx.pop_stack_rooted();
-
-        let preserve_this = cx.fetch_and_inc_ip() == 1;
-
-        let target = if preserve_this {
-            cx.peek_stack().root(&mut cx.scope)
-        } else {
-            cx.pop_stack().root(&mut cx.scope)
-        };
+        let DynamicPropertyAccessOperands { key, target } = extract_back_infallible(&mut cx);
 
         let key = PropertyKey::from_value(&mut cx, key)?;
 
@@ -1856,7 +1833,8 @@ mod handlers {
     }
 
     pub fn ldlocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = ExternalId(cx.fetchw_and_inc_ip());
+        let LdLocalExtOperands(id) = extract_back_infallible(&mut cx);
+
         let value = Value::external(cx.get_external(id).id());
 
         // Unbox external values such that any use will create a copy
@@ -1871,65 +1849,74 @@ mod handlers {
     }
 
     pub fn storelocalext(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = ExternalId(cx.fetchw_and_inc_ip());
-        let kind = AssignKind2::from_repr(cx.fetch_and_inc_ip()).unwrap();
+        let StoreLocalExtOperands { local, kind } = extract_back_infallible(&mut cx);
 
-        macro_rules! op {
-            ($op:expr) => {{
-                let value = Value::external(cx.get_external(id).id()).unbox_external(&cx.scope);
-                let right = cx.pop_stack_rooted();
-                let res = $op(value, right, &mut cx)?;
-                let external = cx.scope.get_external(id);
-                assign_to_external(&mut cx.scope, external, res.clone());
-                cx.stack.push(res);
-            }};
+        fn binop(
+            cx: &mut DispatchContext<'_>,
+            external: ExternalId,
+            right: Value,
+            op: fn(Value, Value, &mut LocalScope<'_>) -> Result<Value, Value>,
+        ) -> Result<(), Value> {
+            let external = cx.scope.get_external(external);
+            let left = external.inner(&cx.scope);
+            let res = op(left, right, &mut cx.scope)?;
+            assign_to_external(&mut cx.scope, external, res);
+            cx.stack.push(res);
+            Ok(())
         }
 
-        macro_rules! prefix {
-            ($op:expr) => {{
-                let value = Value::external(cx.get_external(id).id()).unbox_external(&cx.scope);
-                let right = Value::number(1.0);
-                let res = $op(value, right, &mut cx)?;
-                let external = cx.scope.get_external(id);
-                assign_to_external(&mut cx.scope, external, res.clone());
-                cx.stack.push(res);
-            }};
+        fn prefix(
+            cx: &mut DispatchContext<'_>,
+            id: ExternalId,
+            op: fn(Value, Value, &mut LocalScope<'_>) -> Result<Value, Value>,
+        ) -> Result<(), Unrooted> {
+            let external = cx.get_external(id);
+            let left = external.inner(&cx.scope);
+            let right = Value::number(1.0);
+            let res = op(left, right, &mut cx.scope)?;
+            assign_to_external(&mut cx.scope, external, res);
+            cx.stack.push(res);
+            Ok(())
         }
 
-        macro_rules! postfix {
-            ($op:expr) => {{
-                let value = Value::external(cx.get_external(id).id()).unbox_external(&cx.scope);
-                let right = Value::number(1.0);
-                let res = $op(value, right, &mut cx)?;
-                let external = cx.scope.get_external(id);
-                assign_to_external(&mut cx.scope, external, res);
-                cx.stack.push(value);
-            }};
+        fn postfix(
+            cx: &mut DispatchContext<'_>,
+            id: ExternalId,
+            op: fn(Value, Value, &mut LocalScope<'_>) -> Result<Value, Value>,
+        ) -> Result<(), Unrooted> {
+            let external = cx.get_external(id);
+            let left = external.inner(&cx.scope);
+            let left = Value::number(left.to_number(&mut cx.scope)?);
+            let right = Value::number(1.0);
+            let res = op(left, right, &mut cx.scope)?;
+            assign_to_external(&mut cx.scope, external, res);
+            cx.stack.push(left);
+            Ok(())
         }
 
         match kind {
-            AssignKind2::Assignment => {
-                let value = cx.pop_stack_rooted();
-                let external = cx.scope.get_external(id);
+            AssignKind::Assignment(value) => {
+                let value = value.root(&mut cx.scope);
+                let external = cx.scope.get_external(local);
                 assign_to_external(&mut cx.scope, external, value);
                 cx.stack.push(value);
             }
-            AssignKind2::AddAssignment => op!(Value::add),
-            AssignKind2::SubAssignment => op!(Value::sub),
-            AssignKind2::MulAssignment => op!(Value::mul),
-            AssignKind2::DivAssignment => op!(Value::div),
-            AssignKind2::RemAssignment => op!(Value::rem),
-            AssignKind2::PowAssignment => op!(Value::pow),
-            AssignKind2::ShlAssignment => op!(Value::bitshl),
-            AssignKind2::ShrAssignment => op!(Value::bitshr),
-            AssignKind2::UshrAssignment => op!(Value::bitushr),
-            AssignKind2::BitAndAssignment => op!(Value::bitand),
-            AssignKind2::BitOrAssignment => op!(Value::bitor),
-            AssignKind2::BitXorAssignment => op!(Value::bitxor),
-            AssignKind2::PrefixIncrement => prefix!(Value::add),
-            AssignKind2::PostfixIncrement => postfix!(Value::add),
-            AssignKind2::PrefixDecrement => prefix!(Value::sub),
-            AssignKind2::PostfixDecrement => postfix!(Value::sub),
+            AssignKind::AddAssignment(value) => binop(&mut cx, local, value, Value::add)?,
+            AssignKind::SubAssignment(value) => binop(&mut cx, local, value, Value::sub)?,
+            AssignKind::MulAssignment(value) => binop(&mut cx, local, value, Value::mul)?,
+            AssignKind::DivAssignment(value) => binop(&mut cx, local, value, Value::div)?,
+            AssignKind::RemAssignment(value) => binop(&mut cx, local, value, Value::rem)?,
+            AssignKind::PowAssignment(value) => binop(&mut cx, local, value, Value::pow)?,
+            AssignKind::ShlAssignment(value) => binop(&mut cx, local, value, Value::bitshl)?,
+            AssignKind::ShrAssignment(value) => binop(&mut cx, local, value, Value::bitshr)?,
+            AssignKind::UshrAssignment(value) => binop(&mut cx, local, value, Value::bitushr)?,
+            AssignKind::BitAndAssignment(value) => binop(&mut cx, local, value, Value::bitand)?,
+            AssignKind::BitOrAssignment(value) => binop(&mut cx, local, value, Value::bitor)?,
+            AssignKind::BitXorAssignment(value) => binop(&mut cx, local, value, Value::bitxor)?,
+            AssignKind::PrefixIncrement => prefix(&mut cx, local, Value::add)?,
+            AssignKind::PrefixDecrement => prefix(&mut cx, local, Value::sub)?,
+            AssignKind::PostfixIncrement => postfix(&mut cx, local, Value::add)?,
+            AssignKind::PostfixDecrement => postfix(&mut cx, local, Value::sub)?,
         }
 
         Ok(None)
@@ -1961,19 +1948,19 @@ mod handlers {
     }
 
     pub fn throw(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        Err(cx.pop_stack())
+        let ThrowOperands { value } = extract_back_infallible(&mut cx);
+        Err(value)
     }
 
     pub fn type_of(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.pop_stack_rooted();
+        let TypeofOperands { value } = extract_back_infallible(&mut cx);
         let ty = value.type_of(&cx.scope).as_value();
         cx.stack.push(ty);
         Ok(None)
     }
 
     pub fn type_of_ident(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let id = cx.fetchw_and_inc_ip();
-        let ident = JsString::from(cx.constants().symbols[SymbolConstant(id)]);
+        let TypeofIdentOperands(SymbolConstantWide(ident)) = extract_back_infallible(&mut cx);
         let prop = cx
             .global
             .get_property(ident.to_key(&mut cx.scope), &mut cx.scope)?
@@ -1985,17 +1972,17 @@ mod handlers {
     }
 
     pub fn yield_(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.pop_stack();
+        let YieldOperands { value } = extract_back_infallible(&mut cx);
         Ok(Some(HandleResult::Yield(value)))
     }
 
     pub fn await_(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.pop_stack();
+        let AwaitOperands { value } = extract_back_infallible(&mut cx);
         Ok(Some(HandleResult::Await(value)))
     }
 
     pub fn import_dyn(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.pop_stack_rooted();
+        let ImportDynOperands { value } = extract_back_infallible(&mut cx);
 
         let _ret = match cx.params.dynamic_import_callback {
             Some(cb) => cb(&mut cx, value)?,
@@ -2009,25 +1996,24 @@ mod handlers {
     }
 
     pub fn import_static(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let ty = StaticImportKind::from_repr(cx.fetch_and_inc_ip()).expect("Invalid import kind");
-        let local_id = BackLocalId(cx.fetchw_and_inc_ip());
-        let path_id = cx.fetchw_and_inc_ip();
-
-        let path = cx.constants().symbols[SymbolConstant(path_id)];
+        let ImportStaticOperands {
+            kind,
+            local,
+            path: SymbolConstantWide(path),
+        } = extract_back_infallible(&mut cx);
 
         let value = match cx.params.static_import_callback {
-            Some(cb) => cb(&mut cx, ty, path.into())?,
+            Some(cb) => cb(&mut cx, kind, path.into())?,
             None => throw!(cx, Error, "Static imports are disabled for this context."),
         };
 
-        cx.set_local(local_id, value);
+        cx.set_local(local, value);
 
         Ok(None)
     }
 
     pub fn export_default(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        // NOTE: Does not need to be rooted. Storing it in frame state counts as being rooted.
-        let value = cx.pop_stack();
+        let ExportDefaultOperands { value } = extract_back_infallible(&mut cx);
 
         match cx.frames.current_state_mut() {
             FrameState::Module(module) => {
@@ -2040,15 +2026,24 @@ mod handlers {
     }
 
     pub fn export_named(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let mut iter = BackwardSequence::<ExportProperty>::new_u16(&mut cx);
-        while let Some(prop) = iter.next(&mut cx) {
-            let ExportProperty(value, ident) = prop?;
+        let ExportNamedOperands(mut members) = extract_back_infallible(&mut cx);
+
+        while let Some(prop) = members.next_infallible(&mut cx) {
+            let (ident, value) = match prop {
+                ExportProperty::Local { local, export_name } => (export_name.into(), cx.get_local(local).into()),
+                ExportProperty::Global { ident } => {
+                    let key = ident.to_key(&mut cx.scope);
+                    let value = cx.global.get_property(key, &mut cx.scope)?;
+                    (ident.into(), value)
+                }
+            };
 
             match cx.frames.current_state_mut() {
                 FrameState::Module(exports) => exports.named.push((ident, value)),
                 _ => throw!(cx, Error, "Export is only available at the top level in modules"),
             }
         }
+
         Ok(None)
     }
 
@@ -2067,7 +2062,7 @@ mod handlers {
     }
 
     pub fn bindthis(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.pop_stack_rooted();
+        let BindThisOperands { value } = extract_back_infallible(&mut cx);
         cx.frames.set_this(This::bound(value));
         Ok(None)
     }
@@ -2098,7 +2093,7 @@ mod handlers {
     }
 
     pub fn call_symbol_iterator(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.pop_stack_rooted();
+        let CallSymbolIteratorOperands { value } = extract_back_infallible(&mut cx);
         let symbol_iterator = cx.statics.symbol_iterator;
         let iterable = value
             .get_property(symbol_iterator.to_key(&mut cx.scope), &mut cx.scope)?
@@ -2109,7 +2104,7 @@ mod handlers {
     }
 
     pub fn call_for_in_iterator(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let value = cx.pop_stack_rooted();
+        let ForInIteratorOperands { value } = extract_back_infallible(&mut cx);
 
         let keys = match value.unpack() {
             ValueKind::Object(obj) => obj.own_keys(&mut cx.scope, OwnKeysMode::OnlyEnumerable)?,
@@ -2129,8 +2124,8 @@ mod handlers {
     }
 
     pub fn delete_property_dynamic(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let (property, target) = cx.pop_stack2_rooted();
-        let key = PropertyKey::from_value(&mut cx, property)?;
+        let DeletePropertyDynamicOperands { key, target } = extract_back_infallible(&mut cx);
+        let key = PropertyKey::from_value(&mut cx, key)?;
         let value = target.delete_property(key, &mut cx.scope)?;
 
         // TODO: not correct, as `undefined` might have been the actual value
@@ -2140,10 +2135,8 @@ mod handlers {
     }
 
     pub fn delete_property_static(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let target = cx.pop_stack_rooted();
-        let cid = cx.fetchw_and_inc_ip();
-        let con = JsString::from(cx.constants().symbols[SymbolConstant(cid)]);
-        let value = target.delete_property(con.to_key(&mut cx.scope), &mut cx.scope)?;
+        let DeletePropertyStaticOperands { key, target } = extract_back_infallible(&mut cx);
+        let value = target.delete_property(key.0.to_key(&mut cx.scope), &mut cx.scope)?;
 
         // TODO: not correct, as `undefined` might have been the actual value
         let did_delete = !matches!(value.root(&mut cx.scope).unpack(), ValueKind::Undefined(..));

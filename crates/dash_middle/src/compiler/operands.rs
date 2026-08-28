@@ -745,12 +745,12 @@ define_operand_struct_with_source! {
     }
 }
 
-pub struct DynamicPropertyAccess<S: ExtractSource> {
+pub struct DynamicPropertyAccessOperands<S: ExtractSource> {
     pub key: S::Value,
     pub target: S::Value,
 }
 
-impl<S: ExtractSource> ExtractBack<S> for DynamicPropertyAccess<S> {
+impl<S: ExtractSource> ExtractBack<S> for DynamicPropertyAccessOperands<S> {
     type Exception = Infallible;
 
     fn extract_back(source: &mut S) -> Result<Self, Self::Exception> {
@@ -799,7 +799,7 @@ define_operand_struct_with_source! {
 define_operand_struct_with_source! {
     type Exception = Infallible;
     struct TypeofOperands<S: ExtractSource> {
-        pub value: S::Unrooted
+        pub value: S::Value
     }
 }
 
@@ -825,7 +825,7 @@ define_operand_struct_with_source! {
 define_operand_struct_with_source! {
     type Exception = Infallible;
     struct ImportDynOperands<S: ExtractSource> {
-        pub value: S::Unrooted
+        pub value: S::Value
     }
 }
 
@@ -845,9 +845,33 @@ define_operand_struct_with_source! {
     }
 }
 
+pub enum ExportProperty {
+    Local { local: BackLocalId, export_name: Symbol },
+    Global { ident: Symbol },
+}
+impl<S: ExtractSource> ExtractBack<S> for ExportProperty {
+    type Exception = Infallible;
+
+    fn extract_back(cx: &mut S) -> Result<Self, Self::Exception> {
+        Ok(match extract_back_infallible(cx) {
+            ExportPropertyKind::Local => {
+                let local: BackLocalId = extract_back_infallible(cx);
+                let ident: SymbolConstantWide = extract_back_infallible(cx);
+                Self::Local {
+                    local,
+                    export_name: ident.0,
+                }
+            }
+            ExportPropertyKind::Global => Self::Global {
+                ident: extract_back_infallible::<_, SymbolConstantWide>(cx).0,
+            },
+        })
+    }
+}
+
 define_operand_struct! {
     type Exception = Infallible;
-    struct ExportNamedOperands(pub BackwardSequence<ExportPropertyKind>);
+    struct ExportNamedOperands(pub BackwardSequence<ExportProperty>);
 }
 
 define_operand_struct_with_source! {
@@ -874,8 +898,8 @@ define_operand_struct_with_source! {
 define_operand_struct_with_source! {
     type Exception = Infallible;
     struct DeletePropertyDynamicOperands<S: ExtractSource> {
-        pub key: S::Value,
-        pub target: S::Value
+        pub target: S::Value,
+        pub key: S::Value
     }
 }
 
