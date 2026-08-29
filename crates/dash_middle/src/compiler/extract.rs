@@ -109,6 +109,7 @@ impl<T> ForwardSequence<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct BackwardSequence<T> {
     /// How many more values can we yield from `BackwardSequence::next`?
     remaining_len: usize,
@@ -116,12 +117,24 @@ pub struct BackwardSequence<T> {
 }
 
 impl<T> BackwardSequence<T> {
+    pub fn new_u8(source: &mut impl ExtractSource) -> Self {
+        let len = source.fetch_u8();
+        Self {
+            remaining_len: len.into(),
+            _phantom: PhantomData,
+        }
+    }
+
     pub fn new_u16(source: &mut impl ExtractSource) -> Self {
         let len = source.fetch_u16();
         Self {
             remaining_len: len.into(),
             _phantom: PhantomData,
         }
+    }
+
+    pub fn remaining_len(&self) -> usize {
+        self.remaining_len
     }
 }
 
@@ -135,14 +148,6 @@ impl<S: ExtractSource, T: ExtractBack<S>> IteratorWith<&mut S> for BackwardSeque
         } else {
             None
         }
-    }
-}
-
-impl<S: ExtractSource, T: ExtractBack<S>> ExtractBack<S> for BackwardSequence<T> {
-    type Exception = Infallible;
-
-    fn extract_back(source: &mut S) -> Result<Self, Self::Exception> {
-        Ok(Self::new_u16(source))
     }
 }
 

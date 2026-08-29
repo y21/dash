@@ -287,14 +287,22 @@ macro_rules! define_operand_struct {
     };
     (
         type Exception = $ety:ty;
-        struct $name:ident { $( $vis:vis $fname:ident : $fty:ty ),* }
+        struct $name:ident { $( $vis:vis $fname:ident : $fty:ty $( = $finit:expr )? ),* }
     ) => {
         pub struct $name { $( $vis $fname: $fty ),* }
         impl<S: ExtractSource> ExtractBack<S> for $name {
             type Exception = $ety;
 
             fn extract_back(cx: &mut S) -> Result<Self, Self::Exception> {
-                Ok(Self { $( $fname: <$fty as ExtractBack<S>>::extract_back(cx)? ),* })
+                macro_rules! init {
+                    ($ftty:ty = $ffinit:expr) => {
+                        $ffinit(cx)
+                    };
+                    ($ffty:ty) => {
+                        <$ffty as ExtractBack<S>>::extract_back(cx)?
+                    }
+                }
+                Ok(Self { $( $fname: init!($fty $( = $finit )?) ),* })
             }
         }
     };
@@ -316,14 +324,22 @@ macro_rules! define_operand_struct_with_source {
     };
     (
         type Exception = $ety:ty;
-        struct $name:ident <$($gen_name:ident : $gen_bound:path),*> { $( $vis:vis $fname:ident : $fty:ty ),* }
+        struct $name:ident <$($gen_name:ident : $gen_bound:path),*> { $( $vis:vis $fname:ident : $fty:ty $( = $finit:expr )? ),* }
     ) => {
         pub struct $name<S: ExtractSource> { $( $vis $fname: $fty ),* }
         impl<S: ExtractSource> ExtractBack<S> for $name<S> {
             type Exception = $ety;
 
             fn extract_back(cx: &mut S) -> Result<Self, Self::Exception> {
-                Ok(Self { $( $fname: <$fty as ExtractBack<S>>::extract_back(cx)? ),* })
+                macro_rules! init {
+                    ($ftty:ty = $ffinit:expr) => {
+                        $ffinit(cx)
+                    };
+                    ($ffty:ty) => {
+                        <$ffty as ExtractBack<S>>::extract_back(cx)?
+                    }
+                }
+                Ok(Self { $( $fname: init!($fty $( = $finit )?) ),* })
             }
         }
     };
@@ -552,7 +568,8 @@ define_operand_struct! {
     struct CallOperands {
         pub argc: u8,
         pub has_this: bool,
-        pub function_call_kind: FunctionCallKind
+        pub function_call_kind: FunctionCallKind,
+        pub spread_indices: BackwardSequence<u8> = BackwardSequence::new_u8
     }
 }
 
@@ -897,7 +914,9 @@ impl<S: ExtractSource> ExtractBack<S> for ExportProperty {
 
 define_operand_struct! {
     type Exception = Infallible;
-    struct ExportNamedOperands(pub BackwardSequence<ExportProperty>);
+    struct ExportNamedOperands {
+        pub members: BackwardSequence<ExportProperty> = BackwardSequence::new_u16
+    }
 }
 
 define_operand_struct_with_source! {
@@ -951,7 +970,7 @@ define_operand_struct_with_source! {
     struct ObjectDestructuringOperands<S: ExtractSource> {
         pub rest_local_id: OptionNoneMax<BackLocalId>,
         pub target: S::Value,
-        pub members: BackwardSequence<ObjectDestructuringMember>
+        pub members: BackwardSequence<ObjectDestructuringMember> = BackwardSequence::new_u16
     }
 }
 
@@ -967,7 +986,7 @@ define_operand_struct_with_source! {
     type Exception = Infallible;
     struct ArrayDestructuringOperands<S: ExtractSource> {
         pub array: S::Value,
-        pub members: BackwardSequence<OptionDiscriminatedByte<ArrayDestructuringMember>>
+        pub members: BackwardSequence<OptionDiscriminatedByte<ArrayDestructuringMember>> = BackwardSequence::new_u16
     }
 }
 

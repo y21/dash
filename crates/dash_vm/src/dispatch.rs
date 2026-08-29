@@ -136,7 +136,7 @@ mod handlers {
     use dash_middle::compiler::FunctionCallKind;
     use dash_middle::compiler::constant::FunctionConstant;
     use dash_middle::compiler::external::{External, PossiblyExternalId};
-    use dash_middle::compiler::extract::{ForwardSequence, extract_back_infallible};
+    use dash_middle::compiler::extract::{BackwardSequence, ForwardSequence, extract_back_infallible};
     use dash_middle::compiler::operands::{
         AddOperands, ArrayDestructuringMember, ArrayDestructuringOperands, ArrayLiteralElement, ArrayLiteralOperands,
         AssignKind, AssignPropertiesOperands, AwaitOperands, BinaryOperator, BindThisOperands, BitandOperands,
@@ -158,7 +158,7 @@ mod handlers {
         SymbolConstantWide, ThrowOperands, TryCatchDepth, TypeofIdentOperands, TypeofOperands, YieldOperands,
     };
     use dash_middle::interner::{Symbol, sym};
-    use dash_middle::iterator_with::{InfallibleIteratorWith, IteratorWith};
+    use dash_middle::iterator_with::{self, InfallibleIteratorWith, IteratorWith};
     use dash_middle::parser::statement::{Asyncness, FunctionKind as ParserFunctionKind};
     use if_chain::if_chain;
     use smallvec::SmallVec;
@@ -774,6 +774,7 @@ mod handlers {
         user_function: &UserFunction,
         mut argc: usize,
         kind: FunctionCallKind,
+        mut spread_indices: BackwardSequence<u8>,
     ) -> Result<Option<HandleResult>, Unrooted> {
         let sp_before_call = cx.stack.len() - argc;
         let ValueKind::Object(callee) = callee.unpack() else {
@@ -812,17 +813,14 @@ mod handlers {
             }
         };
 
-        let spread_arguments = cx.fetch_and_inc_ip();
-
         // If we have spread args, we need to "splice" values from iterables in.
         // This is hopefully rather "rare" (compared to regular call arguments),
         // so we can afford to do more work here in order to keep the common path fast.
-        if spread_arguments > 0 {
-            let spread_indices: SmallVec<[_; 4]> = (0..spread_arguments).map(|_| cx.fetch_and_inc_ip()).collect();
+        if spread_indices.remaining_len() > 0 {
             let mut spread_count = 0;
 
             let mut splice_args = Vec::new();
-            for spread_index in spread_indices {
+            while let Some(spread_index) = spread_indices.next_infallible(&mut cx) {
                 splice_args.clear();
                 let adjusted_spread_index = (sp_before_call as isize + spread_index as isize + spread_count) as usize;
 
@@ -870,34 +868,39 @@ mod handlers {
         argc: usize,
         function_call_kind: FunctionCallKind,
         call_ip: Ip,
+        spread_indices: BackwardSequence<u8>,
     ) -> Result<Option<HandleResult>, Unrooted> {
         let args = {
             let mut args = SmallVec::with_capacity(argc);
 
-            let len = cx.fetch_and_inc_ip();
-            let spread_indices: SmallVec<[_; 4]> = (0..len).map(|_| cx.fetch_and_inc_ip()).collect();
-
             let raw_args = cx.drain_stack_rooted(argc);
 
-            if len == 0 {
+            if spread_indices.remaining_len() == 0 {
                 // Fast path for no spread arguments
                 args.extend(raw_args);
             } else {
-                let mut indices_iter = spread_indices.into_iter().peekable();
+                let mut indices_iter = <_ as IteratorWith<&mut DispatchContext<'_>>>::peekable(spread_indices);
                 let raw_args = raw_args.collect::<SmallVec<[Value; 3]>>();
 
                 for (index, value) in raw_args.into_iter().enumerate() {
-                    if indices_iter.peek().is_some_and(|&v| usize::from(v) == index) {
+                    let is_spread_argument = iterator_with::next_if(&mut indices_iter, &mut cx, |v| {
+                        let v = *v;
+                        let Ok(v) = v;
+                        usize::from(v) == index
+                    })
+                    .is_some();
+
+                    if is_spread_argument {
+                        // Spread the value into the argument list
                         let len = value.length_of_array_like(&mut cx.scope)?;
                         for i in 0..len {
                             let value = value
                                 .get_property(i.to_key(&mut cx.scope), &mut cx.scope)?
                                 .root(&mut cx.scope);
-                            // NB: no need to push into `refs` since we already rooted it
                             args.push(value);
                         }
-                        indices_iter.next();
                     } else {
+                        // Single value
                         args.push(value);
                     }
                 }
@@ -930,6 +933,7 @@ mod handlers {
             argc,
             function_call_kind,
             has_this,
+            spread_indices,
         } = extract_back_infallible(&mut cx);
         let argc = usize::from(argc);
 
@@ -956,19 +960,36 @@ mod handlers {
 
         if let Some(function) = callee.unpack().downcast_ref::<Function>(&cx.scope) {
             match function.kind() {
-                FunctionKind::User(user) => call_flat(cx, callee, this, function, user, argc, function_call_kind),
+                FunctionKind::User(user) => call_flat(
+                    cx,
+                    callee,
+                    this,
+                    function,
+                    user,
+                    argc,
+                    function_call_kind,
+                    spread_indices,
+                ),
                 FunctionKind::Closure(closure) => {
                     if function_call_kind == FunctionCallKind::Constructor {
                         throw!(cx.scope, TypeError, "closure cannot be called as a constructor")
                     }
 
-                    let bound_this = closure.this;
-                    call_flat(cx, callee, bound_this, function, &closure.fun, argc, function_call_kind)
+                    call_flat(
+                        cx,
+                        callee,
+                        closure.this,
+                        function,
+                        &closure.fun,
+                        argc,
+                        function_call_kind,
+                        spread_indices,
+                    )
                 }
-                _ => call_generic(cx, callee, this, argc, function_call_kind, call_ip),
+                _ => call_generic(cx, callee, this, argc, function_call_kind, call_ip, spread_indices),
             }
         } else {
-            call_generic(cx, callee, this, argc, function_call_kind, call_ip)
+            call_generic(cx, callee, this, argc, function_call_kind, call_ip, spread_indices)
         }
     }
 
@@ -1715,7 +1736,7 @@ mod handlers {
     }
 
     pub fn export_named(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let ExportNamedOperands(mut members) = extract_back_infallible(&mut cx);
+        let ExportNamedOperands { mut members } = extract_back_infallible(&mut cx);
 
         while let Some(prop) = members.next_infallible(&mut cx) {
             let (ident, value) = match prop {
