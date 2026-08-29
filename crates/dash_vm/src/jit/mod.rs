@@ -172,7 +172,12 @@ impl Iterator for JitExtractContext<'_, '_> {
     }
 }
 
-fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
+#[derive(Debug)]
+pub enum CompileError {
+    UnhandledInstruction(Instruction),
+}
+
+fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Result<MmapFn, CompileError> {
     scope.frames.with_current_bytecode(|bytecode| {
         fn target_from_relative(next_bc_ip: u32, rel: i16) -> Ip {
             let target = next_bc_ip as i64 + rel as i64;
@@ -368,7 +373,7 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
                 Instruction::DelayedReturn => emit_stub!(DelayedRetOperands<JitExtractContext<'_, '_>>),
                 Instruction::NewTarget => emit_stub!(),
                 Instruction::Nop => emit_stub!(),
-                Instruction::Try => todo!("try instructions are not yet supported by the JIT"),
+                Instruction::Try => return Err(CompileError::UnhandledInstruction(instr)),
             }
         }
 
@@ -396,19 +401,19 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
         x86.mark_internal_label(InternalLabel::StubStatusHandler);
         x86.jmp_internal_label(InternalLabel::Epilogue);
 
-        MmapFn::alloc(x86.buffer())
+        Ok(MmapFn::alloc(x86.buffer()))
     })
 }
 
-pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> JitFnHandle {
+pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Result<JitFnHandle, CompileError> {
     let current_fn = Rc::as_ptr(scope.frames.current_fn());
     let key = (current_fn, start);
 
     if let Some(func) = scope.jit.compiled_fn_cache.get(&key) {
-        JitFnHandle(Rc::clone(func))
+        Ok(JitFnHandle(Rc::clone(func)))
     } else {
-        let func = Rc::new(compile_uncached(scope, start, end));
+        let func = Rc::new(compile_uncached(scope, start, end)?);
         scope.jit.compiled_fn_cache.insert(key, Rc::clone(&func));
-        JitFnHandle(func)
+        Ok(JitFnHandle(func))
     }
 }

@@ -133,6 +133,7 @@ impl DerefMut for DispatchContext<'_> {
 }
 
 mod handlers {
+    use dash_log::warn;
     use dash_middle::compiler::FunctionCallKind;
     use dash_middle::compiler::constant::FunctionConstant;
     use dash_middle::compiler::external::{External, PossiblyExternalId};
@@ -1113,25 +1114,36 @@ mod handlers {
         let ip = cx.frames.current_ip();
         let target_ip = ip + offset;
 
-        if unlikely(!hotness.is_disabled()) {
-            // Slow path: we've either iterated less than 128 times, or this is the 128th time and we can try to optimize.
-            let hotness = hotness.try_increment();
+        'jit: {
+            if unlikely(!hotness.is_disabled()) {
+                // Slow path: we've either iterated less than 128 times, or this is the 128th time and we can try to optimize.
+                let next_hotness = hotness.try_increment();
 
-            match hotness {
-                Some(hotness) => {
-                    // Still counting.
-                    cx.frames.set_byte(ip - 3, hotness.raw());
-                }
-                None => {
-                    // We've saturated the counter. Attempt to JIT.
+                match next_hotness {
+                    Some(hotness) => {
+                        // Still counting.
+                        cx.frames.set_byte(ip - 3, hotness.raw());
+                    }
+                    None => {
+                        // We've saturated the counter. Attempt to JIT.
 
-                    let func = jit::compile_loop_region(&mut cx.scope, target_ip, ip);
-                    let result = func.call(&mut cx);
-                    match result {
-                        JitReturn::Normal { ip } => {
-                            cx.frames.set_ip(ip);
+                        let start_ip = target_ip;
+                        let end_ip = ip;
+                        let func = match jit::compile_loop_region(&mut cx.scope, start_ip, end_ip) {
+                            Ok(func) => func,
+                            Err(err) => {
+                                warn!("failed to jit compile region {start_ip:?}..={end_ip:?}: {err:?}");
+                                cx.frames.set_byte(ip - 3, hotness.disable().raw());
+                                break 'jit;
+                            }
+                        };
+                        let result = func.call(&mut cx);
+                        match result {
+                            JitReturn::Normal { ip } => {
+                                cx.frames.set_ip(ip);
+                            }
+                            JitReturn::Exception { value } => return Err(value),
                         }
-                        JitReturn::Exception { value } => return Err(value),
                     }
                 }
             }
