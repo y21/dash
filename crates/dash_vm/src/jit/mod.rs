@@ -13,7 +13,7 @@ use crate::frame::Ip;
 use crate::jit::jumpresolver::InternalLabel;
 use crate::jit::mmap::MmapFn;
 use crate::localscope::LocalScope;
-use crate::value::Unrooted;
+use crate::value::{Unpack, Unrooted, ValueKind};
 
 mod jumpresolver;
 mod mmap;
@@ -101,14 +101,27 @@ extern "C" fn handler_stub(vm: &mut Vm, _: *mut JitOutData, handler: u8, ip: u32
     }
 }
 
+#[repr(u8)]
+enum CheckCondition {
+    Truthy,
+    Nullish,
+    Undefined,
+}
+
 #[repr(C)]
 struct JitVtable {
     stub_fn: extern "C" fn(&mut Vm, *mut JitOutData, u8, u32) -> HandlerStubReturn,
-    last_value_is_truthy: extern "C" fn(&mut Vm, bool) -> bool,
+    check_last_value: extern "C" fn(&mut Vm, bool, CheckCondition) -> bool,
 }
 
-extern "C" fn last_value_is_truthy(vm: &mut Vm, pop: bool) -> bool {
-    let result = vm.stack.last().unwrap().clone().is_truthy(&mut vm.scope());
+extern "C" fn check_last_value(vm: &mut Vm, pop: bool, check: CheckCondition) -> bool {
+    let value = vm.stack.last().unwrap().clone();
+
+    let result = match check {
+        CheckCondition::Truthy => value.is_truthy(vm),
+        CheckCondition::Nullish => value.is_nullish(),
+        CheckCondition::Undefined => matches!(value.unpack(), ValueKind::Undefined(_)),
+    };
     if pop {
         vm.stack.pop();
     }
@@ -117,7 +130,7 @@ extern "C" fn last_value_is_truthy(vm: &mut Vm, pop: bool) -> bool {
 
 static JIT_VTABLE: JitVtable = JitVtable {
     stub_fn: handler_stub,
-    last_value_is_truthy,
+    check_last_value,
 };
 
 #[repr(C)]
@@ -226,6 +239,31 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Result<Mm
             x86.jne_internal_label(InternalLabel::StubStatusHandler);
         }
 
+        fn emit_conditional_jump(
+            cx: &mut JitExtractContext,
+            x86: &mut x86::Emitter,
+            offset: i16,
+            check: CheckCondition,
+            jump_if_true: bool,
+            pop: bool,
+        ) {
+            let target_bc_ip = target_from_relative(cx.ip as u32, offset);
+            x86.mov_reg_mem_u8(
+                x86::Register::Rax,
+                x86::Register::R14,
+                offset_of!(JitVtable, check_last_value).try_into().unwrap(),
+            );
+            x86.mov_reg_reg(x86::Register::Rdi, x86::Register::R12);
+            x86.mov_reg_imm32(x86::Register::Rsi, pop.into());
+            x86.mov_reg_imm32(x86::Register::Rdx, check as u32);
+            x86.call_reg(x86::Register::Rax);
+            x86.cmp_reg_al_imm8(1);
+            match jump_if_true {
+                true => x86.je_bytecode_ip(target_bc_ip),
+                false => x86.jne_bytecode_ip(target_bc_ip),
+            }
+        }
+
         let mut cx = JitExtractContext {
             bytes: bytecode,
             ip: 0,
@@ -251,23 +289,51 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Result<Mm
                 Instruction::JmpFalseP => {
                     let JmpFalsePopOperands(ConditionalJumpPopOperands { offset, value: _ }) =
                         extract_back_infallible(&mut cx);
+                    emit_conditional_jump(&mut cx, &mut x86, offset, CheckCondition::Truthy, false, true);
+                }
+                Instruction::JmpFalseNP => {
+                    let JmpFalseNoPopOperands(ConditionalJumpNoPopOperands { offset, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_conditional_jump(&mut cx, &mut x86, offset, CheckCondition::Truthy, false, false);
+                }
+                Instruction::JmpTrueP => {
+                    let JmpTruePopOperands(ConditionalJumpPopOperands { offset, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_conditional_jump(&mut cx, &mut x86, offset, CheckCondition::Truthy, true, true);
+                }
+                Instruction::JmpTrueNP => {
+                    let JmpTrueNoPopOperands(ConditionalJumpNoPopOperands { offset, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_conditional_jump(&mut cx, &mut x86, offset, CheckCondition::Truthy, true, false);
+                }
+                Instruction::JmpNullishNP => {
+                    let JmpNullishNoPopOperands(ConditionalJumpNoPopOperands { offset, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_conditional_jump(&mut cx, &mut x86, offset, CheckCondition::Nullish, true, false);
+                }
+                Instruction::JmpNullishP => {
+                    let JmpNullishPopOperands(ConditionalJumpPopOperands { offset, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_conditional_jump(&mut cx, &mut x86, offset, CheckCondition::Nullish, true, true);
+                }
+                Instruction::JmpUndefinedNP => {
+                    let JmpUndefinedNoPopOperands(ConditionalJumpNoPopOperands { offset, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_conditional_jump(&mut cx, &mut x86, offset, CheckCondition::Undefined, true, false);
+                }
+                Instruction::JmpUndefinedP => {
+                    let JmpUndefinedPopOperands(ConditionalJumpPopOperands { offset, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_conditional_jump(&mut cx, &mut x86, offset, CheckCondition::Undefined, true, true);
+                }
+                Instruction::Jmp => {
+                    let JmpOperands(offset) = extract_back_infallible(&mut cx);
                     let target_bc_ip = target_from_relative(cx.ip as u32, offset);
-
-                    x86.mov_reg_mem_u8(
-                        x86::Register::Rax,
-                        x86::Register::R14,
-                        offset_of!(JitVtable, last_value_is_truthy).try_into().unwrap(),
-                    );
-                    x86.mov_reg_reg(x86::Register::Rdi, x86::Register::R12);
-                    x86.mov_reg_imm32(x86::Register::Rsi, 1);
-                    x86.call_reg(x86::Register::Rax);
-                    x86.cmp_reg_al_imm8(1);
-                    x86.jne_bytecode_ip(target_bc_ip);
+                    x86.jmp_bytecode_ip(target_bc_ip);
                 }
                 Instruction::LoopBackJmp => {
                     let LoopBackjumpOperands { offset, hotness: _ } = extract_back_infallible(&mut cx);
                     let target_bc_ip = target_from_relative(cx.ip as u32, offset);
-
                     x86.jmp_bytecode_ip(target_bc_ip);
                 }
                 Instruction::LdLocal => {
@@ -402,10 +468,6 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Result<Mm
                     exhaust!(spread_indices, &mut cx);
                     emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
-                Instruction::Jmp => {
-                    let JmpOperands(_) = extract_back_infallible(&mut cx);
-                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
-                }
                 Instruction::StaticPropAccess => {
                     let StaticPropertyAccessOperands { ident: _, target: _ } = extract_back_infallible(&mut cx);
                     emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
@@ -472,41 +534,6 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Result<Mm
                 }
                 Instruction::Yield => {
                     let YieldOperands { value: _ } = extract_back_infallible(&mut cx);
-                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
-                }
-                Instruction::JmpFalseNP => {
-                    let JmpFalseNoPopOperands(ConditionalJumpNoPopOperands { offset: _, value: _ }) =
-                        extract_back_infallible(&mut cx);
-                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
-                }
-                Instruction::JmpTrueP => {
-                    let JmpTruePopOperands(ConditionalJumpPopOperands { offset: _, value: _ }) =
-                        extract_back_infallible(&mut cx);
-                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
-                }
-                Instruction::JmpTrueNP => {
-                    let JmpTrueNoPopOperands(ConditionalJumpNoPopOperands { offset: _, value: _ }) =
-                        extract_back_infallible(&mut cx);
-                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
-                }
-                Instruction::JmpNullishP => {
-                    let JmpNullishPopOperands(ConditionalJumpPopOperands { offset: _, value: _ }) =
-                        extract_back_infallible(&mut cx);
-                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
-                }
-                Instruction::JmpNullishNP => {
-                    let JmpNullishNoPopOperands(ConditionalJumpNoPopOperands { offset: _, value: _ }) =
-                        extract_back_infallible(&mut cx);
-                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
-                }
-                Instruction::JmpUndefinedNP => {
-                    let JmpUndefinedNoPopOperands(ConditionalJumpNoPopOperands { offset: _, value: _ }) =
-                        extract_back_infallible(&mut cx);
-                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
-                }
-                Instruction::JmpUndefinedP => {
-                    let JmpUndefinedPopOperands(ConditionalJumpPopOperands { offset: _, value: _ }) =
-                        extract_back_infallible(&mut cx);
                     emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::BitOr => {

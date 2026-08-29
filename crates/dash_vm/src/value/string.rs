@@ -39,12 +39,12 @@ impl JsString {
         self.sym
     }
 
-    pub fn res<'a>(self, sc: &'a LocalScope<'_>) -> &'a str {
-        sc.interner.resolve(self.sym)
+    pub fn res<'a>(self, vm: &'a Vm) -> &'a str {
+        vm.interner.resolve(self.sym)
     }
 
-    pub fn len(self, sc: &mut LocalScope<'_>) -> usize {
-        self.res(sc).len()
+    pub fn len(self, vm: &Vm) -> usize {
+        self.res(vm).len()
     }
 }
 

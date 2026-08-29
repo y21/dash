@@ -800,10 +800,10 @@ impl Value {
         }
     }
 
-    pub fn is_truthy(&self, sc: &mut LocalScope<'_>) -> bool {
+    pub fn is_truthy(&self, vm: &Vm) -> bool {
         match self.unpack() {
             ValueKind::Boolean(b) => b,
-            ValueKind::String(s) => !s.res(sc).is_empty(),
+            ValueKind::String(s) => !s.res(vm).is_empty(),
             ValueKind::Number(Number(n)) => n != 0.0 && !n.is_nan(),
             ValueKind::Symbol(_) => true,
             ValueKind::Object(_) => true,

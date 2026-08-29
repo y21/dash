@@ -21,6 +21,7 @@ mod opcodes {
     pub const POP_REG: u8 = 0x58;
     pub const CMP_AL_IMM8: u8 = 0x3C;
     pub const TEST_R_R: u8 = 0x85;
+    pub const JE_REL32: u8 = 0x84;
     pub const JNE_REL32: u8 = 0x85;
     pub const JMP_REL32: u8 = 0xE9;
     pub const ADD_RM_IMM8: u8 = 0x83;
@@ -280,6 +281,12 @@ impl Emitter {
         self.buffer.extend_from_slice(&offset.to_le_bytes());
     }
 
+    pub fn je_imm32(&mut self, offset: i32) {
+        self.buffer.push(0x0f);
+        self.buffer.push(opcodes::JE_REL32);
+        self.buffer.extend_from_slice(&offset.to_le_bytes());
+    }
+
     pub fn test_reg_reg(&mut self, reg1: Register, reg2: Register) {
         let mut rex = 0;
         if reg1.needs_rex_prefix() {
@@ -309,6 +316,16 @@ impl Emitter {
             self.patch_rel32(patch_site, target_x86_ip);
         } else {
             self.jne_imm32(0);
+        }
+    }
+
+    pub fn je_bytecode_ip(&mut self, target_bc_ip: Ip) {
+        let patch_site = self.offset() + 2;
+        if let Some(target_x86_ip) = self.jumps.add_user_reference(target_bc_ip, patch_site) {
+            self.je_imm32(0);
+            self.patch_rel32(patch_site, target_x86_ip);
+        } else {
+            self.je_imm32(0);
         }
     }
 
