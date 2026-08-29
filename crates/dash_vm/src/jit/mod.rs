@@ -4,10 +4,7 @@ use std::rc::Rc;
 use dash_middle::compiler::constant::ConstantPool;
 use dash_middle::compiler::extract::{ExtractSource, extract_back_infallible};
 use dash_middle::compiler::instruction::Instruction;
-use dash_middle::compiler::operands::{
-    ConditionalJumpPopOperands, IntrinsicOperands, JmpFalsePopOperands, LdLocalOperands, LoopBackjumpOperands,
-    PopOperands,
-};
+use dash_middle::compiler::operands::*;
 
 use crate::Vm;
 use crate::dispatch::{DispatchContext, INSTRUCTION_LUT};
@@ -230,6 +227,16 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
             // IP for the operands *in the full bytecode* of the function (not the sliced loop bytecode).
             let operands_absolute_ip = start.0 + cx.ip as u32;
 
+            macro_rules! emit_stub {
+                ($operands:ty) => {{
+                    let _: $operands = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }};
+                () => {{
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }};
+            }
+
             match instr {
                 Instruction::JmpFalseP => {
                     let JmpFalsePopOperands(ConditionalJumpPopOperands { offset, value: _ }) =
@@ -253,19 +260,115 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> MmapFn {
 
                     x86.jmp_bytecode_ip(target_bc_ip);
                 }
-                Instruction::IntrinsicOp => {
-                    let IntrinsicOperands(_) = extract_back_infallible(&mut cx);
-                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                Instruction::IntrinsicOp => emit_stub!(IntrinsicOperands<JitExtractContext<'_, '_>>),
+                Instruction::LdLocal => emit_stub!(LdLocalOperands),
+                Instruction::Pop => emit_stub!(PopOperands<JitExtractContext<'_, '_>>),
+                Instruction::Add => emit_stub!(AddOperands<JitExtractContext<'_, '_>>),
+                Instruction::Sub => emit_stub!(SubOperands<JitExtractContext<'_, '_>>),
+                Instruction::Mul => emit_stub!(MulOperands<JitExtractContext<'_, '_>>),
+                Instruction::Div => emit_stub!(DivOperands<JitExtractContext<'_, '_>>),
+                Instruction::Rem => emit_stub!(RemOperands<JitExtractContext<'_, '_>>),
+                Instruction::Pow => emit_stub!(PowOperands<JitExtractContext<'_, '_>>),
+                Instruction::Gt => emit_stub!(GtOperands<JitExtractContext<'_, '_>>),
+                Instruction::Ge => emit_stub!(GeOperands<JitExtractContext<'_, '_>>),
+                Instruction::Lt => emit_stub!(LtOperands<JitExtractContext<'_, '_>>),
+                Instruction::Le => emit_stub!(LeOperands<JitExtractContext<'_, '_>>),
+                Instruction::Eq => emit_stub!(EqOperands<JitExtractContext<'_, '_>>),
+                Instruction::Ne => emit_stub!(NeOperands<JitExtractContext<'_, '_>>),
+                Instruction::LdGlobal => emit_stub!(LdGlobalOperands),
+                Instruction::String => emit_stub!(StringConstantOperands),
+                Instruction::Boolean => emit_stub!(BooleanConstantOperands),
+                Instruction::Number => emit_stub!(NumberConstantOperands),
+                Instruction::Regex => emit_stub!(RegexConstantOperands),
+                Instruction::Null => emit_stub!(),
+                Instruction::Undefined => emit_stub!(),
+                Instruction::Function => emit_stub!(FunctionConstantOperands),
+                Instruction::Pos => emit_stub!(PosOperands<JitExtractContext<'_, '_>>),
+                Instruction::Neg => emit_stub!(NegOperands<JitExtractContext<'_, '_>>),
+                Instruction::TypeOf => emit_stub!(TypeofOperands<JitExtractContext<'_, '_>>),
+                Instruction::TypeOfGlobalIdent => emit_stub!(TypeofIdentOperands),
+                Instruction::BitNot => emit_stub!(BitnotOperands<JitExtractContext<'_, '_>>),
+                Instruction::Not => emit_stub!(NotOperands<JitExtractContext<'_, '_>>),
+                Instruction::StoreLocal => emit_stub!(StoreLocalOperands<JitExtractContext<'_, '_>>),
+                Instruction::StoreGlobal => emit_stub!(StoreGlobalOperands<JitExtractContext<'_, '_>>),
+                Instruction::Ret => emit_stub!(RetOperands<JitExtractContext<'_, '_>>),
+                Instruction::Call => emit_stub!(CallOperands),
+                Instruction::Jmp => emit_stub!(JmpOperands),
+                Instruction::StaticPropAccess => {
+                    emit_stub!(StaticPropertyAccessOperands<JitExtractContext<'_, '_>>)
                 }
-                Instruction::LdLocal => {
-                    let LdLocalOperands(_) = extract_back_infallible(&mut cx);
-                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                Instruction::DynamicPropAccess => {
+                    emit_stub!(DynamicPropertyAccessOperands<JitExtractContext<'_, '_>>)
                 }
-                Instruction::Pop => {
-                    let PopOperands(_) = extract_back_infallible(&mut cx);
-                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                Instruction::ArrayLit => emit_stub!(ArrayLiteralOperands),
+                Instruction::ObjLit => emit_stub!(ObjectLiteralOperands<JitExtractContext<'_, '_>>),
+                Instruction::BindThis => emit_stub!(BindThisOperands<JitExtractContext<'_, '_>>),
+                Instruction::This => emit_stub!(),
+                Instruction::StaticPropAssign => {
+                    emit_stub!(StaticPropertyAssignOperands<JitExtractContext<'_, '_>>)
                 }
-                other => todo!("{other:?} @ {:x?}", cx.ip),
+                Instruction::DynamicPropAssign => {
+                    emit_stub!(DynamicPropertyAssignOperands<JitExtractContext<'_, '_>>)
+                }
+                Instruction::LdLocalExt => emit_stub!(LdLocalExtOperands),
+                Instruction::StoreLocalExt => emit_stub!(StoreLocalExtOperands<JitExtractContext<'_, '_>>),
+                Instruction::StrictEq => emit_stub!(StrictEqOperands<JitExtractContext<'_, '_>>),
+                Instruction::StrictNe => emit_stub!(StrictNeOperands<JitExtractContext<'_, '_>>),
+                Instruction::PopTry => emit_stub!(),
+                Instruction::FinallyEnd => emit_stub!(FinallyEndOperands),
+                Instruction::Throw => emit_stub!(ThrowOperands<JitExtractContext<'_, '_>>),
+                Instruction::Yield => emit_stub!(YieldOperands<JitExtractContext<'_, '_>>),
+                Instruction::JmpFalseNP => emit_stub!(JmpFalseNoPopOperands<JitExtractContext<'_, '_>>),
+                Instruction::JmpTrueP => emit_stub!(JmpTruePopOperands<JitExtractContext<'_, '_>>),
+                Instruction::JmpTrueNP => emit_stub!(JmpTrueNoPopOperands<JitExtractContext<'_, '_>>),
+                Instruction::JmpNullishP => emit_stub!(JmpNullishPopOperands<JitExtractContext<'_, '_>>),
+                Instruction::JmpNullishNP => emit_stub!(JmpNullishNoPopOperands<JitExtractContext<'_, '_>>),
+                Instruction::JmpUndefinedNP => emit_stub!(JmpUndefinedNoPopOperands<JitExtractContext<'_, '_>>),
+                Instruction::JmpUndefinedP => emit_stub!(JmpUndefinedPopOperands<JitExtractContext<'_, '_>>),
+                Instruction::BitOr => emit_stub!(BitorOperands<JitExtractContext<'_, '_>>),
+                Instruction::BitXor => emit_stub!(BitxorOperands<JitExtractContext<'_, '_>>),
+                Instruction::BitAnd => emit_stub!(BitandOperands<JitExtractContext<'_, '_>>),
+                Instruction::BitShl => emit_stub!(BitshlOperands<JitExtractContext<'_, '_>>),
+                Instruction::BitShr => emit_stub!(BitshrOperands<JitExtractContext<'_, '_>>),
+                Instruction::BitUshr => emit_stub!(BitushrOperands<JitExtractContext<'_, '_>>),
+                Instruction::ObjIn => emit_stub!(ObjectInOperands<JitExtractContext<'_, '_>>),
+                Instruction::InstanceOf => emit_stub!(InstanceofOperands<JitExtractContext<'_, '_>>),
+                Instruction::ImportDyn => emit_stub!(ImportDynOperands<JitExtractContext<'_, '_>>),
+                Instruction::ImportStatic => emit_stub!(ImportStaticOperands),
+                Instruction::ExportDefault => emit_stub!(ExportDefaultOperands<JitExtractContext<'_, '_>>),
+                Instruction::ExportNamed => emit_stub!(ExportNamedOperands),
+                Instruction::Debugger => emit_stub!(),
+                Instruction::Global => emit_stub!(),
+                Instruction::Super => emit_stub!(),
+                Instruction::Undef => emit_stub!(),
+                Instruction::Await => emit_stub!(AwaitOperands<JitExtractContext<'_, '_>>),
+                Instruction::Nan => emit_stub!(),
+                Instruction::Infinity => emit_stub!(),
+                Instruction::CallSymbolIterator => {
+                    emit_stub!(CallSymbolIteratorOperands<JitExtractContext<'_, '_>>)
+                }
+                Instruction::CallForInIterator => {
+                    emit_stub!(ForInIteratorOperands<JitExtractContext<'_, '_>>)
+                }
+                Instruction::DeletePropertyStatic => {
+                    emit_stub!(DeletePropertyStaticOperands<JitExtractContext<'_, '_>>)
+                }
+                Instruction::DeletePropertyDynamic => {
+                    emit_stub!(DeletePropertyDynamicOperands<JitExtractContext<'_, '_>>)
+                }
+                Instruction::ObjDestruct => {
+                    emit_stub!(ObjectDestructuringOperands<JitExtractContext<'_, '_>>)
+                }
+                Instruction::ArrayDestruct => {
+                    emit_stub!(ArrayDestructuringOperands<JitExtractContext<'_, '_>>)
+                }
+                Instruction::AssignProperties => {
+                    emit_stub!(AssignPropertiesOperands<JitExtractContext<'_, '_>>)
+                }
+                Instruction::DelayedReturn => emit_stub!(DelayedRetOperands<JitExtractContext<'_, '_>>),
+                Instruction::NewTarget => emit_stub!(),
+                Instruction::Nop => emit_stub!(),
+                Instruction::Try => todo!("try instructions are not yet supported by the JIT"),
             }
         }
 
