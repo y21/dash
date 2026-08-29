@@ -639,12 +639,21 @@ define_operand_struct! {
     struct LdLocalOperands(pub BackLocalId);
 }
 
-define_operand_struct! {
+pub struct ArrayLiteralOperands<S: ExtractSource> {
+    pub members: ForwardSequence<ArrayLiteralElement<S>>,
+    pub dense: bool,
+}
+
+impl<S: ExtractSource> ExtractBack<S> for ArrayLiteralOperands<S> {
     type Exception = Infallible;
-    struct ArrayLiteralOperands {
-        // TODO: store a forwardsequence, similar to object literals!
-        pub len: u16,
-        pub stack_values: u16
+
+    fn extract_back(cx: &mut S) -> Result<Self, Self::Exception> {
+        let len = cx.fetch_u16();
+        let stack_count = cx.fetch_u16();
+        Ok(Self {
+            members: ForwardSequence::from_stack_count_len(cx, stack_count.into(), len.into()),
+            dense: len == stack_count,
+        })
     }
 }
 

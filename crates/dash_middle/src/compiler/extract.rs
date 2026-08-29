@@ -1,3 +1,4 @@
+use core::fmt;
 use std::convert::Infallible;
 use std::marker::PhantomData;
 
@@ -87,6 +88,22 @@ pub struct ForwardSequence<T> {
     _phantom: PhantomData<T>,
 }
 
+impl<T> fmt::Debug for ForwardSequence<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            remaining_len,
+            stack_index,
+            starting_stack_index,
+            _phantom,
+        } = self;
+        f.debug_struct("ForwardSequence")
+            .field("remaining_len", &remaining_len)
+            .field("stack_index", &stack_index)
+            .field("starting_stack_index", &starting_stack_index)
+            .finish()
+    }
+}
+
 impl<T> ForwardSequence<T> {
     pub fn from_stack_count_len(source: &impl ExtractSource, count: usize, len: usize) -> Self {
         let stack_index = source.stack_len() - count;
@@ -96,6 +113,10 @@ impl<T> ForwardSequence<T> {
             starting_stack_index: stack_index,
             _phantom: PhantomData,
         }
+    }
+
+    pub fn remaining_len(&self) -> usize {
+        self.remaining_len
     }
 
     pub fn next_stack_index(&mut self) -> usize {

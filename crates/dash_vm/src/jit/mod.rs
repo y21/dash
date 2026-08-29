@@ -147,7 +147,9 @@ impl<'a, 'vm> ExtractSource for JitExtractContext<'a, 'vm> {
     }
 
     fn stack_len(&self) -> usize {
-        0
+        // Bit of a hack, but usize::MAX (instead of 0) prevents overflows in ForwardSequence stack value count calculation.
+        // In any case, the value here should not matter since we never actually use material stack values in the JIT.
+        usize::MAX
     }
 
     fn pop_stack_rooted(&mut self) -> Self::Value {}
@@ -413,11 +415,8 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Result<Mm
                     emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::ArrayLit => {
-                    let ArrayLiteralOperands {
-                        len: _,
-                        stack_values: _,
-                    } = extract_back_infallible(&mut cx);
-                    todo!();
+                    let ArrayLiteralOperands { members, dense: _ } = extract_back_infallible(&mut cx);
+                    exhaust!(members, &mut cx);
                     emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::ObjLit => {

@@ -1234,15 +1234,12 @@ mod handlers {
         Ok(None)
     }
 
-    fn with_arraylit_elements(
-        cx: &mut DispatchContext<'_>,
-        len: usize,
-        stack_values: usize,
-        mut fun: impl FnMut(ArrayLiteralElement<DispatchContext<'_>>),
+    fn with_arraylit_elements<'vm>(
+        cx: &mut DispatchContext<'vm>,
+        mut members: ForwardSequence<ArrayLiteralElement<DispatchContext<'vm>>>,
+        mut fun: impl FnMut(ArrayLiteralElement<DispatchContext<'vm>>),
     ) -> Result<(), Unrooted> {
-        let mut iter =
-            ForwardSequence::<ArrayLiteralElement<DispatchContext<'_>>>::from_stack_count_len(cx, stack_values, len);
-        while let Some(element) = iter.next_infallible(cx) {
+        while let Some(element) = members.next_infallible(cx) {
             match element {
                 ArrayLiteralElement::Single(value) => fun(ArrayLiteralElement::Single(value)),
                 ArrayLiteralElement::Spread(source) => {
@@ -1257,16 +1254,17 @@ mod handlers {
                 ArrayLiteralElement::Hole(count) => fun(ArrayLiteralElement::Hole(count)),
             }
         }
-        let truncate_to = cx.stack.len() - stack_values;
-        cx.stack.truncate(truncate_to);
+        members.commit(cx);
 
-        debug_assert!(iter.next_infallible(cx).is_none());
         Ok(())
     }
 
-    fn arraylit_holey(cx: &mut DispatchContext<'_>, len: usize, stack_values: usize) -> Result<Array, Unrooted> {
+    fn arraylit_holey<'vm>(
+        cx: &mut DispatchContext<'vm>,
+        members: ForwardSequence<ArrayLiteralElement<DispatchContext<'vm>>>,
+    ) -> Result<Array, Unrooted> {
         let mut table = ArrayTable::new();
-        with_arraylit_elements(cx, len, stack_values, |element| match element {
+        with_arraylit_elements(cx, members, |element| match element {
             ArrayLiteralElement::Single(value) => table.push(PropertyValue::static_default(value)),
             ArrayLiteralElement::Hole(hole) => table.resize(table.len() + hole),
             ArrayLiteralElement::Spread(..) => unreachable!(),
@@ -1274,10 +1272,13 @@ mod handlers {
         Ok(Array::from_table(&cx.scope, table))
     }
 
-    fn arraylit_dense(cx: &mut DispatchContext<'_>, len: usize) -> Result<Array, Unrooted> {
+    fn arraylit_dense<'vm>(
+        cx: &mut DispatchContext<'vm>,
+        members: ForwardSequence<ArrayLiteralElement<DispatchContext<'vm>>>,
+    ) -> Result<Array, Unrooted> {
         // Dense implies len == stack_values
-        let mut new_elements = Vec::with_capacity(len);
-        with_arraylit_elements(cx, len, len, |element| match element {
+        let mut new_elements = Vec::with_capacity(members.remaining_len());
+        with_arraylit_elements(cx, members, |element| match element {
             ArrayLiteralElement::Single(value) => new_elements.push(PropertyValue::static_default(value)),
             ArrayLiteralElement::Spread(..) | ArrayLiteralElement::Hole(_) => unreachable!(),
         })?;
@@ -1285,13 +1286,13 @@ mod handlers {
     }
 
     pub fn arraylit(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let ArrayLiteralOperands { len, stack_values } = extract_back_infallible(&mut cx);
+        let ArrayLiteralOperands { members, dense } = extract_back_infallible(&mut cx);
 
         // Split up into two functions as a non-holey array literal can be evaluated more efficiently
-        let array = if len == stack_values {
-            arraylit_dense(&mut cx, len.into())?
+        let array = if dense {
+            arraylit_dense(&mut cx, members)?
         } else {
-            arraylit_holey(&mut cx, len.into(), stack_values.into())?
+            arraylit_holey(&mut cx, members)?
         };
 
         let handle = cx.scope.register(array);
