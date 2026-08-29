@@ -1,3 +1,4 @@
+use std::mem;
 use std::rc::Rc;
 
 use dash_middle::compiler::constant::{ConstantPool, Function};
@@ -213,11 +214,22 @@ impl FrameStack {
                 state: frame.state,
                 delayed_ret: frame.delayed_ret,
                 arguments: frame.arguments,
+                in_jit: false,
             });
             Ok(())
         } else {
             Err(())
         }
+    }
+
+    pub fn in_jit(&self) -> bool {
+        self.current_extended().in_jit
+    }
+
+    /// Replaces the `in_jit` flag of the current frame and returns the previous value.
+    pub fn replace_in_jit(&mut self, in_jit: bool) -> bool {
+        let extended = self.current_extended_mut();
+        mem::replace(&mut extended.in_jit, in_jit)
     }
 
     pub fn function_name_iter(&self) -> impl DoubleEndedIterator<Item = Option<Symbol>> {

@@ -79,6 +79,15 @@ pub trait IteratorWith<Args>: Sized {
     }
 }
 
+#[macro_export]
+macro_rules! exhaust {
+    ($iter:expr, $args:expr) => {{
+        use $crate::iterator_with::IteratorWith;
+        let mut iter = $iter;
+        while let Some(_) = iter.next($args) {}
+    }};
+}
+
 pub trait InfallibleIteratorWith<Args>: IteratorWith<Args> {
     type Item;
 

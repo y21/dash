@@ -961,39 +961,41 @@ mod handlers {
             (callee, This::default())
         };
 
-        if let Some(function) = callee.unpack().downcast_ref::<Function>(&cx.scope) {
-            match function.kind() {
-                FunctionKind::User(user) => call_flat(
-                    cx,
-                    callee,
-                    this,
-                    function,
-                    user,
-                    argc,
-                    function_call_kind,
-                    spread_indices,
-                ),
-                FunctionKind::Closure(closure) => {
-                    if function_call_kind == FunctionCallKind::Constructor {
-                        throw!(cx.scope, TypeError, "closure cannot be called as a constructor")
-                    }
-
-                    call_flat(
-                        cx,
-                        callee,
-                        closure.this,
-                        function,
-                        &closure.fun,
-                        argc,
-                        function_call_kind,
-                        spread_indices,
-                    )
-                }
-                _ => call_generic(cx, callee, this, argc, function_call_kind, call_ip, spread_indices),
+        'flat_call: {
+            if cx.frames.in_jit() {
+                break 'flat_call;
             }
-        } else {
-            call_generic(cx, callee, this, argc, function_call_kind, call_ip, spread_indices)
-        }
+            let callee_kind = callee.unpack();
+
+            let (function, user_function) = if let Some(function) = callee_kind.downcast_ref::<Function>(&cx.scope) {
+                match function.kind() {
+                    FunctionKind::User(user) => (function, user),
+                    FunctionKind::Closure(closure) => {
+                        if function_call_kind == FunctionCallKind::Constructor {
+                            throw!(cx.scope, TypeError, "closure cannot be called as a constructor")
+                        }
+
+                        (function, &closure.fun)
+                    }
+                    _ => break 'flat_call,
+                }
+            } else {
+                break 'flat_call;
+            };
+
+            return call_flat(
+                cx,
+                callee,
+                this,
+                function,
+                user_function,
+                argc,
+                function_call_kind,
+                spread_indices,
+            );
+        };
+
+        call_generic(cx, callee, this, argc, function_call_kind, call_ip, spread_indices)
     }
 
     pub fn jmpfalsep(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {

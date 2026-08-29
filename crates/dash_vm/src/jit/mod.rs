@@ -5,6 +5,7 @@ use dash_middle::compiler::constant::ConstantPool;
 use dash_middle::compiler::extract::{ExtractSource, extract_back_infallible};
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::operands::*;
+use dash_middle::exhaust;
 
 use crate::Vm;
 use crate::dispatch::{DispatchContext, INSTRUCTION_LUT};
@@ -28,9 +29,11 @@ impl JitFnHandle {
     pub fn call(&self, vm: &mut Vm) -> JitReturn {
         let mut out = MaybeUninit::<JitOutData>::zeroed();
 
+        let previously_in_jit = vm.frames.replace_in_jit(true);
         let ret = self
             .0
             .call3::<&mut Vm, &JitVtable, &mut MaybeUninit<JitOutData>, InternalJitReturn>(vm, &JIT_VTABLE, &mut out);
+        vm.frames.replace_in_jit(previously_in_jit);
 
         // SAFETY: ip is always in bounds
         let ip = unsafe { &raw const (*out.as_ptr()).ip };
@@ -265,112 +268,352 @@ fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Result<Mm
 
                     x86.jmp_bytecode_ip(target_bc_ip);
                 }
-                Instruction::IntrinsicOp => emit_stub!(IntrinsicOperands<JitExtractContext<'_, '_>>),
-                Instruction::LdLocal => emit_stub!(LdLocalOperands),
-                Instruction::Pop => emit_stub!(PopOperands<JitExtractContext<'_, '_>>),
-                Instruction::Add => emit_stub!(AddOperands<JitExtractContext<'_, '_>>),
-                Instruction::Sub => emit_stub!(SubOperands<JitExtractContext<'_, '_>>),
-                Instruction::Mul => emit_stub!(MulOperands<JitExtractContext<'_, '_>>),
-                Instruction::Div => emit_stub!(DivOperands<JitExtractContext<'_, '_>>),
-                Instruction::Rem => emit_stub!(RemOperands<JitExtractContext<'_, '_>>),
-                Instruction::Pow => emit_stub!(PowOperands<JitExtractContext<'_, '_>>),
-                Instruction::Gt => emit_stub!(GtOperands<JitExtractContext<'_, '_>>),
-                Instruction::Ge => emit_stub!(GeOperands<JitExtractContext<'_, '_>>),
-                Instruction::Lt => emit_stub!(LtOperands<JitExtractContext<'_, '_>>),
-                Instruction::Le => emit_stub!(LeOperands<JitExtractContext<'_, '_>>),
-                Instruction::Eq => emit_stub!(EqOperands<JitExtractContext<'_, '_>>),
-                Instruction::Ne => emit_stub!(NeOperands<JitExtractContext<'_, '_>>),
-                Instruction::LdGlobal => emit_stub!(LdGlobalOperands),
-                Instruction::String => emit_stub!(StringConstantOperands),
-                Instruction::Boolean => emit_stub!(BooleanConstantOperands),
-                Instruction::Number => emit_stub!(NumberConstantOperands),
-                Instruction::Regex => emit_stub!(RegexConstantOperands),
+                Instruction::LdLocal => {
+                    let LdLocalOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::IntrinsicOp => {
+                    let IntrinsicOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Pop => {
+                    let PopOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Add => {
+                    let AddOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Sub => {
+                    let SubOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Mul => {
+                    let MulOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Div => {
+                    let DivOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Rem => {
+                    let RemOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Pow => {
+                    let PowOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Gt => {
+                    let GtOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Ge => {
+                    let GeOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Lt => {
+                    let LtOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Le => {
+                    let LeOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Eq => {
+                    let EqOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Ne => {
+                    let NeOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::LdGlobal => {
+                    let LdGlobalOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::String => {
+                    let StringConstantOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Boolean => {
+                    let BooleanConstantOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Number => {
+                    let NumberConstantOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Regex => {
+                    let RegexConstantOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
                 Instruction::Null => emit_stub!(),
                 Instruction::Undefined => emit_stub!(),
-                Instruction::Function => emit_stub!(FunctionConstantOperands),
-                Instruction::Pos => emit_stub!(PosOperands<JitExtractContext<'_, '_>>),
-                Instruction::Neg => emit_stub!(NegOperands<JitExtractContext<'_, '_>>),
-                Instruction::TypeOf => emit_stub!(TypeofOperands<JitExtractContext<'_, '_>>),
-                Instruction::TypeOfGlobalIdent => emit_stub!(TypeofIdentOperands),
-                Instruction::BitNot => emit_stub!(BitnotOperands<JitExtractContext<'_, '_>>),
-                Instruction::Not => emit_stub!(NotOperands<JitExtractContext<'_, '_>>),
-                Instruction::StoreLocal => emit_stub!(StoreLocalOperands<JitExtractContext<'_, '_>>),
-                Instruction::StoreGlobal => emit_stub!(StoreGlobalOperands<JitExtractContext<'_, '_>>),
-                Instruction::Ret => emit_stub!(RetOperands<JitExtractContext<'_, '_>>),
-                Instruction::Call => emit_stub!(CallOperands),
-                Instruction::Jmp => emit_stub!(JmpOperands),
+                Instruction::Function => {
+                    let FunctionConstantOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Pos => {
+                    let PosOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Neg => {
+                    let NegOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::TypeOf => {
+                    let TypeofOperands { value: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::TypeOfGlobalIdent => {
+                    let TypeofIdentOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::BitNot => {
+                    let BitnotOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Not => {
+                    let NotOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::StoreLocal => {
+                    let StoreLocalOperands { local: _, kind: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::StoreGlobal => {
+                    let StoreGlobalOperands { name: _, kind: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Ret => {
+                    let RetOperands { tc_depth: _, value: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Call => {
+                    let CallOperands {
+                        argc: _,
+                        has_this: _,
+                        function_call_kind: _,
+                        spread_indices,
+                    } = extract_back_infallible(&mut cx);
+                    exhaust!(spread_indices, &mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Jmp => {
+                    let JmpOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
                 Instruction::StaticPropAccess => {
-                    emit_stub!(StaticPropertyAccessOperands<JitExtractContext<'_, '_>>)
+                    let StaticPropertyAccessOperands { ident: _, target: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::DynamicPropAccess => {
-                    emit_stub!(DynamicPropertyAccessOperands<JitExtractContext<'_, '_>>)
+                    let DynamicPropertyAccessOperands { key: _, target: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
-                Instruction::ArrayLit => emit_stub!(ArrayLiteralOperands),
-                Instruction::ObjLit => emit_stub!(ObjectLiteralOperands<JitExtractContext<'_, '_>>),
-                Instruction::BindThis => emit_stub!(BindThisOperands<JitExtractContext<'_, '_>>),
+                Instruction::ArrayLit => {
+                    let ArrayLiteralOperands {
+                        len: _,
+                        stack_values: _,
+                    } = extract_back_infallible(&mut cx);
+                    todo!();
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::ObjLit => {
+                    let ObjectLiteralOperands { members } = extract_back_infallible(&mut cx);
+                    exhaust!(members, &mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::BindThis => {
+                    let BindThisOperands { value: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
                 Instruction::This => emit_stub!(),
                 Instruction::StaticPropAssign => {
-                    emit_stub!(StaticPropertyAssignOperands<JitExtractContext<'_, '_>>)
+                    let StaticPropertyAssignOperands {
+                        kind: _,
+                        target: _,
+                        key: _,
+                    } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::DynamicPropAssign => {
-                    emit_stub!(DynamicPropertyAssignOperands<JitExtractContext<'_, '_>>)
+                    let DynamicPropertyAssignOperands {
+                        kind: _,
+                        key: _,
+                        target: _,
+                    } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
-                Instruction::LdLocalExt => emit_stub!(LdLocalExtOperands),
-                Instruction::StoreLocalExt => emit_stub!(StoreLocalExtOperands<JitExtractContext<'_, '_>>),
-                Instruction::StrictEq => emit_stub!(StrictEqOperands<JitExtractContext<'_, '_>>),
-                Instruction::StrictNe => emit_stub!(StrictNeOperands<JitExtractContext<'_, '_>>),
+                Instruction::LdLocalExt => {
+                    let LdLocalExtOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::StoreLocalExt => {
+                    let StoreLocalExtOperands { local: _, kind: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::StrictEq => {
+                    let StrictEqOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::StrictNe => {
+                    let StrictNeOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
                 Instruction::PopTry => emit_stub!(),
-                Instruction::FinallyEnd => emit_stub!(FinallyEndOperands),
-                Instruction::Throw => emit_stub!(ThrowOperands<JitExtractContext<'_, '_>>),
-                Instruction::Yield => emit_stub!(YieldOperands<JitExtractContext<'_, '_>>),
-                Instruction::JmpFalseNP => emit_stub!(JmpFalseNoPopOperands<JitExtractContext<'_, '_>>),
-                Instruction::JmpTrueP => emit_stub!(JmpTruePopOperands<JitExtractContext<'_, '_>>),
-                Instruction::JmpTrueNP => emit_stub!(JmpTrueNoPopOperands<JitExtractContext<'_, '_>>),
-                Instruction::JmpNullishP => emit_stub!(JmpNullishPopOperands<JitExtractContext<'_, '_>>),
-                Instruction::JmpNullishNP => emit_stub!(JmpNullishNoPopOperands<JitExtractContext<'_, '_>>),
-                Instruction::JmpUndefinedNP => emit_stub!(JmpUndefinedNoPopOperands<JitExtractContext<'_, '_>>),
-                Instruction::JmpUndefinedP => emit_stub!(JmpUndefinedPopOperands<JitExtractContext<'_, '_>>),
-                Instruction::BitOr => emit_stub!(BitorOperands<JitExtractContext<'_, '_>>),
-                Instruction::BitXor => emit_stub!(BitxorOperands<JitExtractContext<'_, '_>>),
-                Instruction::BitAnd => emit_stub!(BitandOperands<JitExtractContext<'_, '_>>),
-                Instruction::BitShl => emit_stub!(BitshlOperands<JitExtractContext<'_, '_>>),
-                Instruction::BitShr => emit_stub!(BitshrOperands<JitExtractContext<'_, '_>>),
-                Instruction::BitUshr => emit_stub!(BitushrOperands<JitExtractContext<'_, '_>>),
-                Instruction::ObjIn => emit_stub!(ObjectInOperands<JitExtractContext<'_, '_>>),
-                Instruction::InstanceOf => emit_stub!(InstanceofOperands<JitExtractContext<'_, '_>>),
-                Instruction::ImportDyn => emit_stub!(ImportDynOperands<JitExtractContext<'_, '_>>),
-                Instruction::ImportStatic => emit_stub!(ImportStaticOperands),
-                Instruction::ExportDefault => emit_stub!(ExportDefaultOperands<JitExtractContext<'_, '_>>),
-                Instruction::ExportNamed => emit_stub!(ExportNamedOperands),
+                Instruction::FinallyEnd => {
+                    let FinallyEndOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Throw => {
+                    let ThrowOperands { value: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::Yield => {
+                    let YieldOperands { value: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::JmpFalseNP => {
+                    let JmpFalseNoPopOperands(ConditionalJumpNoPopOperands { offset: _, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::JmpTrueP => {
+                    let JmpTruePopOperands(ConditionalJumpPopOperands { offset: _, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::JmpTrueNP => {
+                    let JmpTrueNoPopOperands(ConditionalJumpNoPopOperands { offset: _, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::JmpNullishP => {
+                    let JmpNullishPopOperands(ConditionalJumpPopOperands { offset: _, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::JmpNullishNP => {
+                    let JmpNullishNoPopOperands(ConditionalJumpNoPopOperands { offset: _, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::JmpUndefinedNP => {
+                    let JmpUndefinedNoPopOperands(ConditionalJumpNoPopOperands { offset: _, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::JmpUndefinedP => {
+                    let JmpUndefinedPopOperands(ConditionalJumpPopOperands { offset: _, value: _ }) =
+                        extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::BitOr => {
+                    let BitorOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::BitXor => {
+                    let BitxorOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::BitAnd => {
+                    let BitandOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::BitShl => {
+                    let BitshlOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::BitShr => {
+                    let BitshrOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::BitUshr => {
+                    let BitushrOperands(BinaryOperator { left: _, right: _ }) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::ObjIn => {
+                    let ObjectInOperands { target: _, key: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::InstanceOf => {
+                    let InstanceofOperands {
+                        constructor: _,
+                        value: _,
+                    } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::ImportDyn => {
+                    let ImportDynOperands { value: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::ImportStatic => {
+                    let ImportStaticOperands {
+                        kind: _,
+                        local: _,
+                        path: _,
+                    } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::ExportDefault => {
+                    let ExportDefaultOperands { value: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
+                Instruction::ExportNamed => {
+                    let ExportNamedOperands { members: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
                 Instruction::Debugger => emit_stub!(),
                 Instruction::Global => emit_stub!(),
                 Instruction::Super => emit_stub!(),
                 Instruction::Undef => emit_stub!(),
-                Instruction::Await => emit_stub!(AwaitOperands<JitExtractContext<'_, '_>>),
+                Instruction::Await => {
+                    let AwaitOperands { value: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
                 Instruction::Nan => emit_stub!(),
                 Instruction::Infinity => emit_stub!(),
                 Instruction::CallSymbolIterator => {
-                    emit_stub!(CallSymbolIteratorOperands<JitExtractContext<'_, '_>>)
+                    let CallSymbolIteratorOperands { value: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::CallForInIterator => {
-                    emit_stub!(ForInIteratorOperands<JitExtractContext<'_, '_>>)
+                    let ForInIteratorOperands { value: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::DeletePropertyStatic => {
-                    emit_stub!(DeletePropertyStaticOperands<JitExtractContext<'_, '_>>)
+                    let DeletePropertyStaticOperands { target: _, key: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::DeletePropertyDynamic => {
-                    emit_stub!(DeletePropertyDynamicOperands<JitExtractContext<'_, '_>>)
+                    let DeletePropertyDynamicOperands { target: _, key: _ } = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::ObjDestruct => {
-                    emit_stub!(ObjectDestructuringOperands<JitExtractContext<'_, '_>>)
+                    let ObjectDestructuringOperands {
+                        rest_local_id: _,
+                        target: _,
+                        members,
+                    } = extract_back_infallible(&mut cx);
+                    exhaust!(members, &mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::ArrayDestruct => {
-                    emit_stub!(ArrayDestructuringOperands<JitExtractContext<'_, '_>>)
+                    let ArrayDestructuringOperands { array: _, members } = extract_back_infallible(&mut cx);
+                    exhaust!(members, &mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
                 Instruction::AssignProperties => {
-                    emit_stub!(AssignPropertiesOperands<JitExtractContext<'_, '_>>)
+                    let AssignPropertiesOperands { members, target: _ } = extract_back_infallible(&mut cx);
+                    exhaust!(members, &mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
                 }
-                Instruction::DelayedReturn => emit_stub!(DelayedRetOperands<JitExtractContext<'_, '_>>),
+                Instruction::DelayedReturn => {
+                    let DelayedRetOperands(_) = extract_back_infallible(&mut cx);
+                    emit_stub_for_instr(&mut x86, instr, operands_absolute_ip);
+                }
                 Instruction::NewTarget => emit_stub!(),
                 Instruction::Nop => emit_stub!(),
                 Instruction::Try => return Err(CompileError::UnhandledInstruction(instr)),

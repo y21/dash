@@ -144,6 +144,11 @@ pub struct ExtendedFrame {
     /// For optimization purposes, this is `None` in frames whose function never references `arguments`,
     /// because there's no reason to construct it in those cases.
     pub arguments: Option<ObjectId>,
+
+    /// Whether part of this frame is being executed in native JIT code.
+    /// When true, this disables certain optimizations that assume that the frame is being executed in the interpreter,
+    /// such as flat calls.
+    pub in_jit: bool,
 }
 
 #[derive(Debug, Clone, Trace)]
