@@ -967,21 +967,22 @@ mod handlers {
             }
             let callee_kind = callee.unpack();
 
-            let (function, user_function) = if let Some(function) = callee_kind.downcast_ref::<Function>(&cx.scope) {
-                match function.kind() {
-                    FunctionKind::User(user) => (function, user),
-                    FunctionKind::Closure(closure) => {
-                        if function_call_kind == FunctionCallKind::Constructor {
-                            throw!(cx.scope, TypeError, "closure cannot be called as a constructor")
-                        }
+            let (function, user_function, this) =
+                if let Some(function) = callee_kind.downcast_ref::<Function>(&cx.scope) {
+                    match function.kind() {
+                        FunctionKind::User(user) => (function, user, this),
+                        FunctionKind::Closure(Closure { fun, this }) => {
+                            if function_call_kind == FunctionCallKind::Constructor {
+                                throw!(cx.scope, TypeError, "closure cannot be called as a constructor")
+                            }
 
-                        (function, &closure.fun)
+                            (function, fun, *this)
+                        }
+                        _ => break 'flat_call,
                     }
-                    _ => break 'flat_call,
-                }
-            } else {
-                break 'flat_call;
-            };
+                } else {
+                    break 'flat_call;
+                };
 
             return call_flat(
                 cx,
