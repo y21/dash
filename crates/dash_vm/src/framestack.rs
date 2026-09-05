@@ -88,10 +88,6 @@ impl FrameStack {
         self.current_extended().this
     }
 
-    pub fn current_fn(&self) -> &Rc<Function> {
-        &self.current_base_ref().function
-    }
-
     pub fn current_external(&self, id: ExternalId) -> ExternalValue {
         self.current_extended().externals[id.0 as usize].clone()
     }
@@ -145,18 +141,6 @@ impl FrameStack {
 
     pub fn fetchw_and_inc_ip(&mut self) -> u16 {
         u16::from_ne_bytes(self.fetch_n_and_inc_ip::<2>())
-    }
-
-    pub fn with_current_bytecode<R>(&self, f: impl FnOnce(&[u8]) -> R) -> R {
-        let base = self.current_base_ref();
-        base.function.buffer.with(|buf| f(buf))
-    }
-
-    pub fn set_byte(&mut self, ip: Ip, value: u8) {
-        let base = self.current_base_mut();
-        base.function.buffer.with_mut(|buf| {
-            buf[ip.0 as usize] = value;
-        });
     }
 
     pub fn pop(&mut self) -> Frame {
@@ -222,6 +206,17 @@ impl FrameStack {
         }
     }
 
+    pub fn function_name_iter(&self) -> impl DoubleEndedIterator<Item = Option<Symbol>> {
+        self.base
+            .iter()
+            .chain(self.current_base.iter())
+            .map(|frame| frame.function.name)
+    }
+}
+
+// Methods for the JIT
+#[cfg_attr(not(feature = "jit"), expect(dead_code))]
+impl FrameStack {
     pub fn in_jit(&self) -> bool {
         self.current_extended().in_jit
     }
@@ -231,11 +226,19 @@ impl FrameStack {
         let extended = self.current_extended_mut();
         mem::replace(&mut extended.in_jit, in_jit)
     }
+    pub fn with_current_bytecode<R>(&self, f: impl FnOnce(&[u8]) -> R) -> R {
+        let base = self.current_base_ref();
+        base.function.buffer.with(|buf| f(buf))
+    }
 
-    pub fn function_name_iter(&self) -> impl DoubleEndedIterator<Item = Option<Symbol>> {
-        self.base
-            .iter()
-            .chain(self.current_base.iter())
-            .map(|frame| frame.function.name)
+    pub fn set_byte(&mut self, ip: Ip, value: u8) {
+        let base = self.current_base_mut();
+        base.function.buffer.with_mut(|buf| {
+            buf[ip.0 as usize] = value;
+        });
+    }
+
+    pub fn current_fn(&self) -> &Rc<Function> {
+        &self.current_base_ref().function
     }
 }
