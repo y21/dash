@@ -133,7 +133,6 @@ impl DerefMut for DispatchContext<'_> {
 }
 
 mod handlers {
-    use dash_log::warn;
     use dash_middle::compiler::FunctionCallKind;
     use dash_middle::compiler::constant::FunctionConstant;
     use dash_middle::compiler::external::{External, PossiblyExternalId};
@@ -170,8 +169,10 @@ mod handlers {
 
     use crate::frame::{FrameState, Ip, Sp, TryBlock};
     use crate::gc::ObjectId;
-    use crate::jit::JitReturn;
-    use crate::util::{likely, unlikely};
+    #[cfg(feature = "jit")]
+    use crate::jit;
+    use crate::throw;
+    use crate::util::likely;
     use crate::value::array::table::ArrayTable;
     use crate::value::array::{Array, ArrayIterator};
     use crate::value::function::args::CallArgs;
@@ -186,7 +187,6 @@ mod handlers {
     use crate::value::propertykey::{PropertyKey, ToPropertyKey};
     use crate::value::regex::RegExp;
     use crate::value::{Unpack, ValueKind};
-    use crate::{jit, throw};
 
     use super::*;
 
@@ -1117,35 +1117,45 @@ mod handlers {
         let ip = cx.frames.current_ip();
         let target_ip = ip + offset;
 
+        #[cfg(not(feature = "jit"))]
+        let _ = hotness;
+
+        #[cfg(feature = "jit")]
         'jit: {
-            if unlikely(!hotness.is_disabled()) {
+            let hotness_byte_ip = ip - 3;
+
+            if crate::util::unlikely(!hotness.is_disabled()) {
                 // Slow path: we've either iterated less than 128 times, or this is the 128th time and we can try to optimize.
                 let next_hotness = hotness.try_increment();
 
                 match next_hotness {
                     Some(hotness) => {
                         // Still counting.
-                        cx.frames.set_byte(ip - 3, hotness.raw());
+                        cx.frames.set_byte(hotness_byte_ip, hotness.raw());
                     }
                     None => {
-                        // We've saturated the counter. Attempt to JIT.
+                        // We've saturated the counter. Attempt to JIT if we can.
+                        if !cx.params.enable_jit {
+                            cx.frames.set_byte(hotness_byte_ip, hotness.disable().raw());
+                            break 'jit;
+                        }
 
                         let start_ip = target_ip;
                         let end_ip = ip;
                         let func = match jit::compile_loop_region(&mut cx.scope, start_ip, end_ip) {
                             Ok(func) => func,
                             Err(err) => {
-                                warn!("failed to jit compile region {start_ip:?}..={end_ip:?}: {err:?}");
-                                cx.frames.set_byte(ip - 3, hotness.disable().raw());
+                                dash_log::warn!("failed to jit compile region {start_ip:?}..={end_ip:?}: {err:?}");
+                                cx.frames.set_byte(hotness_byte_ip, hotness.disable().raw());
                                 break 'jit;
                             }
                         };
                         let result = func.call(&mut cx);
                         match result {
-                            JitReturn::Normal { ip } => {
+                            jit::JitReturn::Normal { ip } => {
                                 cx.frames.set_ip(ip);
                             }
-                            JitReturn::Exception { value } => return Err(value),
+                            jit::JitReturn::Exception { value } => return Err(value),
                         }
                     }
                 }

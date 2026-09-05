@@ -9,8 +9,8 @@ edition = "2024"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(dash_lints)'] }
 
 [features]
-jit = ["dash_typed_cfg"]
-stress_gc = []           # allows stress testing the GC
+jit = ["libc"]
+stress_gc = [] # allows stress testing the GC
 
 [dependencies]
 dash_middle = { path = "../dash_middle" }
@@ -21,14 +21,13 @@ dash_compiler = { path = "../dash_compiler", features = ["from_string"] }
 dash_optimizer = { path = "../dash_optimizer" }
 dash_regex = { path = "../dash_regex" }
 dash_log = { path = "../dash_log" }
-dash_typed_cfg = { path = "../dash_typed_cfg", optional = true }
 bitflags = { version = "2.9.0", features = ["serde"] }
 smallvec = { version = "1.9.0", features = ["const_generics"] }
 ahash = "0.8.3"
 rustc-hash = "2.1.0"
 hashbrown = "0.15.0"
 if_chain = "1.0.2"
-libc = "0.2.189"
+libc = { version = "0.2.189", optional = true }
 
 [dev-dependencies]
 criterion = "0.5.0"

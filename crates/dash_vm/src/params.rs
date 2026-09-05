@@ -32,7 +32,6 @@ impl<T: Any + Trace> State for T {
     }
 }
 
-#[derive(Default)]
 pub struct VmParams {
     pub math_random_callback: Option<MathRandomCallback>,
     pub time_millis_callback: Option<TimeMillisCallback>,
@@ -42,6 +41,24 @@ pub struct VmParams {
     pub unhandled_task_exception_callback: Option<UnhandledTaskException>,
     pub initial_gc_rss_threshold: Option<usize>,
     pub state: Option<Box<dyn State>>,
+    /// Whether to enable JIT compilation. Enabled by default.
+    pub enable_jit: bool,
+}
+
+impl Default for VmParams {
+    fn default() -> Self {
+        Self {
+            math_random_callback: None,
+            time_millis_callback: None,
+            static_import_callback: None,
+            dynamic_import_callback: None,
+            debugger_callback: None,
+            unhandled_task_exception_callback: None,
+            initial_gc_rss_threshold: None,
+            state: None,
+            enable_jit: true,
+        }
+    }
 }
 
 impl VmParams {

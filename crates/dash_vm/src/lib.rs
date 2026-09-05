@@ -44,6 +44,7 @@ pub mod eval;
 pub mod frame;
 mod framestack;
 pub mod gc;
+#[cfg(feature = "jit")]
 mod jit;
 pub mod js_std;
 pub mod json;
@@ -99,6 +100,7 @@ pub struct Vm {
     /// or adding a property to a builtin, will cause this to be set to `false`, which in turn
     /// will disable many optimizations such as specialized intrinsics.
     builtins_pure: bool,
+    #[cfg(feature = "jit")]
     jit: jit::State,
 }
 
@@ -126,6 +128,7 @@ impl Vm {
             params,
             gc_rss_threshold,
             builtins_pure: true,
+            #[cfg(feature = "jit")]
             jit: jit::State::new(),
         };
         vm.prepare();

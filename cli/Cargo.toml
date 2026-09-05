@@ -6,6 +6,7 @@ edition = "2018"
 [features]
 nodejs = ["dash_node_impl"]
 stress_gc = ["dash_vm/stress_gc"]
+jit = ["dash_vm/jit"]
 
 [dependencies]
 dash_node_impl = { path = "../crates/dash_node_impl", optional = true }

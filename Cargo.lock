@@ -638,7 +638,6 @@ dependencies = [
  "dash_parser",
  "dash_proc_macro",
  "dash_regex",
- "dash_typed_cfg",
  "hashbrown",
  "if_chain",
  "libc",
