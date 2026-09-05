@@ -192,7 +192,7 @@ impl Iterator for JitExtractContext<'_, '_> {
 
 #[derive(Debug)]
 pub enum CompileError {
-    UnhandledInstruction(Instruction),
+    UnhandledInstruction(#[expect(dead_code)] Instruction),
 }
 
 fn compile_uncached(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Result<MmapFn, CompileError> {

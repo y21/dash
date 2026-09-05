@@ -8,6 +8,7 @@ pub struct MmapFn {
 }
 
 impl MmapFn {
+    #[expect(dead_code)]
     pub fn call2<T1, T2, R>(&self, t1: T1, t2: T2) -> R {
         type RawMmapFn<T1, T2, R> = extern "C" fn(T1, T2) -> R;
 

@@ -3,6 +3,7 @@ mod modrm {
     pub const MOD_M8: u8 = 0b01_000_000;
 }
 
+#[expect(dead_code)]
 mod rex {
     pub const W: u8 = 0x08;
     pub const R: u8 = 0x04;
@@ -34,6 +35,7 @@ use crate::frame::Ip;
 use crate::jit::jumpresolver::{InternalLabel, JumpResolver, PatchSite, X86Ip};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(dead_code)]
 pub enum Register {
     Al,
     Rax,
@@ -199,6 +201,7 @@ impl Emitter {
         self.buffer.push(imm as u8);
     }
 
+    #[expect(dead_code)]
     pub fn sub_rsp_imm8(&mut self, imm: u8) {
         self.buffer.push(rex::BASE | rex::W);
         self.buffer.push(opcodes::SUB_RM_IMM8);
@@ -360,6 +363,7 @@ impl Emitter {
         }
     }
 
+    #[expect(dead_code)]
     pub fn lea_reg_mem(&mut self, dest: Register, base: Register, offset: i8) {
         let mut rex = 0;
         if dest.needs_rex_prefix() {
