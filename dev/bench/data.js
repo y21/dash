@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788012773712,
+  "lastUpdate": 1788613073583,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -13445,6 +13445,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 25343470,
             "range": "± 187487",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": false,
+          "id": "2d75988f8a7f005b79cfc398f8230f9666c817d8",
+          "message": "jit: clean up dead code in FrameStack",
+          "timestamp": "2026-09-05T14:48:12+02:00",
+          "tree_id": "95d768a36154c05d6c6493c474232556276a87d5",
+          "url": "https://github.com/y21/dash/commit/2d75988f8a7f005b79cfc398f8230f9666c817d8"
+        },
+        "date": 1788613072404,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1177995,
+            "range": "± 16245",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 117957,
+            "range": "± 800",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 71088,
+            "range": "± 1917",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1739833,
+            "range": "± 15460",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 19885685,
+            "range": "± 89803",
             "unit": "ns/iter"
           }
         ]
