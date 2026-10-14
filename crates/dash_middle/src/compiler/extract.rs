@@ -1,13 +1,14 @@
 use core::fmt;
 use std::convert::Infallible;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use crate::compiler::constant::ConstantPool;
 use crate::iterator_with::IteratorWith;
 
 pub trait ExtractSource: Sized {
-    type Value: ExtractBack<Self, Exception = Infallible> + ExtractFront<Self, Exception = Infallible>;
-    type Unrooted: ExtractBack<Self, Exception = Infallible>;
+    type Value: ExtractBack<Self, Exception = Infallible> + ExtractFront<Self, Exception = Infallible> + Debug;
+    type Unrooted: ExtractBack<Self, Exception = Infallible> + Debug;
 
     fn fetch_bytes<const N: usize>(&mut self) -> [u8; N];
 

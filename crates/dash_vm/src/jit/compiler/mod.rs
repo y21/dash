@@ -1,12 +1,12 @@
 use std::mem::offset_of;
 
-use dash_middle::compiler::constant::ConstantPool;
-use dash_middle::compiler::extract::{ExtractSource, extract_back_infallible};
+use dash_middle::compiler::extract::extract_back_infallible;
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::operands::*;
 use dash_middle::exhaust;
 
 use crate::frame::Ip;
+use crate::jit::basic_blocks::{find_block_starts, successors_predecessors};
 use crate::jit::compiler::backend::{
     PrologueData, REG_ARG1, REG_ARG2, REG_ARG3, REG_ARG4, REG_RETURN32, REG_RETURN64, REG_STACK_RELATIVE, Register,
     call_reg, cmp_reg_al_imm8, epilogue, je_bytecode_ip, jmp_bytecode_ip, jmp_internal_label, jne_bytecode_ip,
@@ -16,7 +16,7 @@ use crate::jit::compiler::backend::{
 use crate::jit::compiler::codebuffer::CodeBuffer;
 use crate::jit::jumpresolver::InternalLabel;
 use crate::jit::mmap::MmapFn;
-use crate::jit::{CheckCondition, JitOutData, JitVtable};
+use crate::jit::{CheckCondition, JitOutData, JitVtable, NoValueExtractContext};
 use crate::localscope::LocalScope;
 
 mod backend;
@@ -27,58 +27,6 @@ mod codebuffer;
 pub enum CompileError {
     UnhandledInstruction(Instruction),
     UnsupportedArchitecture,
-}
-
-struct JitExtractContext<'a, 'vm> {
-    bytes: &'a [u8],
-    ip: usize,
-    scope: &'a LocalScope<'vm>,
-}
-
-impl<'a, 'vm> ExtractSource for JitExtractContext<'a, 'vm> {
-    type Value = ();
-
-    type Unrooted = ();
-
-    fn fetch_bytes<const N: usize>(&mut self) -> [u8; N] {
-        let bytes = self.bytes[self.ip..self.ip + N].try_into().unwrap();
-        self.ip += N;
-        bytes
-    }
-
-    fn constants(&self) -> &ConstantPool {
-        &self.scope.frames.current_fn().constants
-    }
-
-    fn stack_len(&self) -> usize {
-        // Bit of a hack, but usize::MAX (instead of 0) prevents overflows in ForwardSequence stack value count calculation.
-        // In any case, the value here should not matter since we never actually use material stack values in the JIT.
-        usize::MAX
-    }
-
-    fn pop_stack_rooted(&mut self) -> Self::Value {}
-
-    fn pop_stack(&mut self) -> Self::Unrooted {}
-
-    fn peek_stack_rooted(&mut self) -> Self::Value {}
-
-    fn peek_stack(&self) -> Self::Unrooted {}
-
-    fn truncate_stack(&mut self, _: usize) {}
-}
-
-impl Iterator for JitExtractContext<'_, '_> {
-    type Item = (Ip, Instruction);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.ip < self.bytes.len() {
-            let byte = self.bytes[self.ip];
-            self.ip += 1;
-            Some((Ip((self.ip - 1) as u32), Instruction::from_repr(byte).unwrap()))
-        } else {
-            None
-        }
-    }
 }
 
 fn emit_stub_for_instr(buf: &mut CodeBuffer, instr: Instruction, ip: u32, prologue_data: &PrologueData) {
@@ -98,7 +46,7 @@ fn target_from_relative(next_bc_ip: u32, rel: i16) -> Ip {
 }
 
 fn emit_conditional_jump(
-    cx: &mut JitExtractContext,
+    cx: &mut NoValueExtractContext,
     buf: &mut CodeBuffer,
     prologue_data: &PrologueData,
     caller_regs: &mut Vec<Register>,
@@ -130,6 +78,13 @@ fn emit_conditional_jump(
 }
 
 pub fn compile(bytecode: &[u8], scope: &LocalScope<'_>, start: Ip, end: Ip) -> Result<MmapFn, CompileError> {
+    let (successors, predecessors) = successors_predecessors(bytecode, scope);
+    println!("{successors:?}\n{predecessors:?}");
+
+    let block_starts = find_block_starts(&predecessors, &successors);
+    println!("Blocks: {block_starts:?}");
+
+    todo!();
     let mut buffer = CodeBuffer::new(bytecode.len());
 
     let mut callee_regs = usable_callee_saved_regs();
@@ -137,11 +92,7 @@ pub fn compile(bytecode: &[u8], scope: &LocalScope<'_>, start: Ip, end: Ip) -> R
 
     let prologue_data = prologue(&mut buffer, &mut callee_regs);
 
-    let mut cx = JitExtractContext {
-        bytes: bytecode,
-        ip: 0,
-        scope,
-    };
+    let mut cx = NoValueExtractContext::new(bytecode, scope);
 
     while let Some((instr_ip, instr)) = cx.next() {
         mark_bytecode_ip(&mut buffer, instr_ip);

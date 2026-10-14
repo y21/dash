@@ -46,6 +46,7 @@ impl<S: ExtractSource> ExtractBack<S> for bool {
     }
 }
 
+#[derive(Debug)]
 pub enum AssignKind<S: ExtractSource> {
     Assignment(S::Unrooted),
     AddAssignment(S::Value),
@@ -111,6 +112,7 @@ impl<S: ExtractSource> ExtractBack<S> for BackLocalId {
 }
 
 /// Wrapper type for `Option<T>` that treats a max int value as `None`
+#[derive(Debug)]
 pub struct OptionNoneMax<T>(pub Option<T>);
 
 impl<S: ExtractSource> ExtractBack<S> for OptionNoneMax<BackLocalId> {
@@ -135,6 +137,7 @@ impl<S: ExtractSource> ExtractBack<S> for ExternalId {
 }
 
 /// Wrapper type for `Option<T>` that encodes a discriminant byte (0=None, 1=Some), then the data
+#[derive(Debug)]
 pub struct OptionDiscriminatedByte<T>(pub Option<T>);
 
 impl<S: ExtractSource, T: ExtractBack<S>> ExtractBack<S> for OptionDiscriminatedByte<T> {
@@ -150,6 +153,7 @@ impl<S: ExtractSource, T: ExtractBack<S>> ExtractBack<S> for OptionDiscriminated
     }
 }
 
+#[derive(Debug)]
 pub struct TryCatchDepth(pub u16);
 
 impl<S: ExtractSource> ExtractBack<S> for TryCatchDepth {
@@ -161,6 +165,7 @@ impl<S: ExtractSource> ExtractBack<S> for TryCatchDepth {
     }
 }
 
+#[derive(Debug)]
 pub struct SymbolConstantWide(pub Symbol);
 
 impl<S: ExtractSource> ExtractBack<S> for SymbolConstantWide {
@@ -172,6 +177,7 @@ impl<S: ExtractSource> ExtractBack<S> for SymbolConstantWide {
     }
 }
 
+#[derive(Debug)]
 pub struct BooleanConstantWide(pub bool);
 
 impl<S: ExtractSource> ExtractBack<S> for BooleanConstantWide {
@@ -183,6 +189,7 @@ impl<S: ExtractSource> ExtractBack<S> for BooleanConstantWide {
     }
 }
 
+#[derive(Debug)]
 pub struct NumberConstantWide(pub f64);
 
 impl<S: ExtractSource> ExtractBack<S> for NumberConstantWide {
@@ -195,6 +202,7 @@ impl<S: ExtractSource> ExtractBack<S> for NumberConstantWide {
 }
 
 /// 8-bit f64 value inlined into the bytecode
+#[derive(Debug)]
 pub struct NumberInline8(pub f64);
 
 impl<S: ExtractSource> ExtractBack<S> for NumberInline8 {
@@ -206,6 +214,7 @@ impl<S: ExtractSource> ExtractBack<S> for NumberInline8 {
 }
 
 /// 32-bit f64 value inlined into the bytecode
+#[derive(Debug)]
 pub struct NumberInline32(pub f64);
 
 impl<S: ExtractSource> ExtractBack<S> for NumberInline32 {
@@ -216,6 +225,7 @@ impl<S: ExtractSource> ExtractBack<S> for NumberInline32 {
     }
 }
 
+#[derive(Debug)]
 pub struct BinaryOperator<S: ExtractSource> {
     pub left: S::Value,
     pub right: S::Value,
@@ -231,6 +241,7 @@ impl<S: ExtractSource> ExtractBack<S> for BinaryOperator<S> {
     }
 }
 
+#[derive(Debug)]
 pub struct ConditionalJumpNoPopOperands<S: ExtractSource> {
     pub offset: i16,
     pub value: S::Unrooted,
@@ -276,6 +287,7 @@ macro_rules! define_operand_struct {
         type Exception = $ety:ty;
         struct $name:ident ( $( $vis:vis $fty:ty ),* );
     ) => {
+        #[derive(Debug)]
         pub struct $name ($( $vis $fty ),*);
         impl<S: ExtractSource> ExtractBack<S> for $name {
             type Exception = $ety;
@@ -289,6 +301,7 @@ macro_rules! define_operand_struct {
         type Exception = $ety:ty;
         struct $name:ident { $( $vis:vis $fname:ident : $fty:ty $( = $finit:expr )? ),* }
     ) => {
+        #[derive(Debug)]
         pub struct $name { $( $vis $fname: $fty ),* }
         impl<S: ExtractSource> ExtractBack<S> for $name {
             type Exception = $ety;
@@ -313,6 +326,7 @@ macro_rules! define_operand_struct_with_source {
         type Exception = $ety:ty;
         struct $name:ident <$($gen_name:ident : $gen_bound:path),*> ( $( $vis:vis $fty:ty ),* );
     ) => {
+        #[derive(Debug)]
         pub struct $name<S: ExtractSource> ($( $vis $fty ),*);
         impl<S: ExtractSource> ExtractBack<S> for $name<S> {
             type Exception = $ety;
@@ -326,6 +340,7 @@ macro_rules! define_operand_struct_with_source {
         type Exception = $ety:ty;
         struct $name:ident <$($gen_name:ident : $gen_bound:path),*> { $( $vis:vis $fname:ident : $fty:ty $( = $finit:expr )? ),* }
     ) => {
+        #[derive(Debug)]
         pub struct $name<S: ExtractSource> { $( $vis $fname: $fty ),* }
         impl<S: ExtractSource> ExtractBack<S> for $name<S> {
             type Exception = $ety;
@@ -360,6 +375,7 @@ define_operand_struct! {
     struct NumberConstantOperands(pub NumberConstantWide);
 }
 
+#[derive(Debug)]
 pub struct RegexConstantOperands(pub RegexConstant);
 impl<S: ExtractSource> ExtractBack<S> for RegexConstantOperands {
     type Exception = Infallible;
@@ -377,6 +393,7 @@ impl RegexConstantOperands {
     }
 }
 
+#[derive(Debug)]
 pub struct FunctionConstantOperands(pub FunctionConstant);
 
 impl<S: ExtractSource> ExtractBack<S> for FunctionConstantOperands {
@@ -639,6 +656,7 @@ define_operand_struct! {
     struct LdLocalOperands(pub BackLocalId);
 }
 
+#[derive(Debug)]
 pub struct ArrayLiteralOperands<S: ExtractSource> {
     pub members: ForwardSequence<ArrayLiteralElement<S>>,
     pub dense: bool,
@@ -657,6 +675,7 @@ impl<S: ExtractSource> ExtractBack<S> for ArrayLiteralOperands<S> {
     }
 }
 
+#[derive(Debug)]
 pub enum ObjectProperty<S: ExtractSource> {
     StaticGetter { key: SymbolConstantWide, value: S::Value },
     DynamicGetter { key: S::Value, value: S::Value },
@@ -733,6 +752,7 @@ impl<S: ExtractSource> ExtractFront<S> for ArrayLiteralElement<S> {
     }
 }
 
+#[derive(Debug)]
 pub struct ObjectLiteralOperands<S: ExtractSource> {
     pub members: ForwardSequence<ObjectProperty<S>>,
 }
@@ -749,6 +769,7 @@ impl<S: ExtractSource> ExtractBack<S> for ObjectLiteralOperands<S> {
     }
 }
 
+#[derive(Debug)]
 pub struct AssignPropertiesOperands<S: ExtractSource> {
     pub members: ForwardSequence<ObjectProperty<S>>,
     pub target: S::Value,
@@ -768,6 +789,7 @@ impl<S: ExtractSource> ExtractBack<S> for AssignPropertiesOperands<S> {
     }
 }
 
+#[derive(Debug)]
 pub struct StaticPropertyAccessOperands<S: ExtractSource> {
     pub ident: SymbolConstantWide,
     pub target: S::Value,
@@ -797,6 +819,7 @@ define_operand_struct_with_source! {
     }
 }
 
+#[derive(Debug)]
 pub struct DynamicPropertyAccessOperands<S: ExtractSource> {
     pub key: S::Value,
     pub target: S::Value,
@@ -897,6 +920,7 @@ define_operand_struct_with_source! {
     }
 }
 
+#[derive(Debug)]
 pub enum ExportProperty {
     Local { local: BackLocalId, export_name: Symbol },
     Global { ident: Symbol },
@@ -999,10 +1023,12 @@ define_operand_struct_with_source! {
     }
 }
 
+#[derive(Debug)]
 pub struct IntrinsicCallOperands {
     pub argc: u8,
 }
 
+#[derive(Debug)]
 pub enum IntrinsicKind<S: ExtractSource> {
     // TODO: these could all just be unrooted since we can use try_prim
     AddNumLR(S::Value, S::Value),
@@ -1065,6 +1091,7 @@ pub enum IntrinsicKind<S: ExtractSource> {
     Acos(IntrinsicCallOperands),
 }
 
+#[derive(Debug)]
 pub struct IntrinsicOperands<S: ExtractSource>(pub IntrinsicKind<S>);
 
 impl<S: ExtractSource> ExtractBack<S> for IntrinsicOperands<S> {
@@ -1339,6 +1366,7 @@ impl<S: ExtractSource> ExtractBack<S> for LoopBackjumpOperands {
     }
 }
 
+#[derive(Debug)]
 pub enum InstructionOperands<S: ExtractSource> {
     Add(AddOperands<S>),
     Sub(SubOperands<S>),

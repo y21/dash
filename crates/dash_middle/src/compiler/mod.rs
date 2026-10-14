@@ -74,7 +74,7 @@ pub enum FunctionCallKind {
 }
 
 #[repr(u8)]
-#[derive(FromRepr, Clone, Copy)]
+#[derive(FromRepr, Clone, Copy, Debug)]
 pub enum StaticImportKind {
     All,
     Default,

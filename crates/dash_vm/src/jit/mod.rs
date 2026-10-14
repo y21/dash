@@ -8,12 +8,17 @@ use crate::jit::mmap::MmapFn;
 use crate::localscope::LocalScope;
 use crate::value::{Unpack, Unrooted, ValueKind};
 
+mod basic_blocks;
 mod compiler;
 mod jumpresolver;
 mod mmap;
 mod state;
 
 pub use compiler::CompileError;
+use dash_middle::compiler::constant::ConstantPool;
+use dash_middle::compiler::extract::{ExtractSource, extract_back_infallible};
+use dash_middle::compiler::instruction::Instruction;
+use dash_middle::compiler::operands::InstructionOperands;
 pub use state::State;
 
 #[derive(Debug)]
@@ -147,5 +152,81 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Re
 
         scope.jit.compiled_fn_cache.insert(key, Rc::clone(&func));
         Ok(JitFnHandle(func))
+    }
+}
+
+#[derive(Debug)]
+struct NoValueExtractContext<'a, 'vm> {
+    bytes: &'a [u8],
+    ip: usize,
+    scope: &'a LocalScope<'vm>,
+}
+
+impl<'a, 'vm> NoValueExtractContext<'a, 'vm> {
+    fn new(bytes: &'a [u8], scope: &'a LocalScope<'vm>) -> Self {
+        Self { bytes, ip: 0, scope }
+    }
+
+    pub fn ip(&self) -> Ip {
+        Ip(self.ip as u32)
+    }
+
+    pub fn has_next(&self) -> bool {
+        self.ip < self.bytes.len()
+    }
+
+    pub fn next_instruction_with_operands(&mut self) -> Option<(Ip, InstructionOperands<Self>)> {
+        if self.has_next() {
+            let ip = self.ip();
+            Some((ip, extract_back_infallible(self)))
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a, 'vm> ExtractSource for NoValueExtractContext<'a, 'vm> {
+    type Value = ();
+
+    type Unrooted = ();
+
+    fn fetch_bytes<const N: usize>(&mut self) -> [u8; N] {
+        let bytes = self.bytes[self.ip..self.ip + N].try_into().unwrap();
+        self.ip += N;
+        bytes
+    }
+
+    fn constants(&self) -> &ConstantPool {
+        &self.scope.frames.current_fn().constants
+    }
+
+    fn stack_len(&self) -> usize {
+        // Bit of a hack, but usize::MAX (instead of 0) prevents overflows in ForwardSequence stack value count calculation.
+        // In any case, the value here should not matter since we never actually use material stack values in the JIT.
+        usize::MAX
+    }
+
+    fn pop_stack_rooted(&mut self) -> Self::Value {}
+
+    fn pop_stack(&mut self) -> Self::Unrooted {}
+
+    fn peek_stack_rooted(&mut self) -> Self::Value {}
+
+    fn peek_stack(&self) -> Self::Unrooted {}
+
+    fn truncate_stack(&mut self, _: usize) {}
+}
+
+impl Iterator for NoValueExtractContext<'_, '_> {
+    type Item = (Ip, Instruction);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.ip < self.bytes.len() {
+            let byte = self.bytes[self.ip];
+            self.ip += 1;
+            Some((Ip((self.ip - 1) as u32), Instruction::from_repr(byte).unwrap()))
+        } else {
+            None
+        }
     }
 }
