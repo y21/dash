@@ -89,6 +89,10 @@ index_type!(
     pub struct Sp(pub u32);
 );
 
+impl Ip {
+    pub const ZERO: Self = Self(0);
+}
+
 impl AddAssign<u32> for Ip {
     fn add_assign(&mut self, rhs: u32) {
         self.0 += rhs;
@@ -116,6 +120,14 @@ impl Sub<u32> for Ip {
 
     fn sub(self, rhs: u32) -> Self::Output {
         Self(self.0 - rhs)
+    }
+}
+
+impl Add<u16> for Sp {
+    type Output = Self;
+
+    fn add(self, rhs: u16) -> Self::Output {
+        Self(self.0 + rhs as u32)
     }
 }
 

@@ -14,6 +14,7 @@ use crate::jit::compiler::backend::{
     mov_reg_reg, prologue, test_reg_reg, usable_callee_saved_regs, usable_caller_saved_regs,
 };
 use crate::jit::compiler::codebuffer::CodeBuffer;
+use crate::jit::dataflow::run_analysis;
 use crate::jit::jumpresolver::InternalLabel;
 use crate::jit::mmap::MmapFn;
 use crate::jit::{CheckCondition, JitOutData, JitVtable, NoValueExtractContext};
@@ -83,6 +84,10 @@ pub fn compile(bytecode: &[u8], scope: &LocalScope<'_>, start: Ip, end: Ip) -> R
 
     let block_starts = find_block_starts(&predecessors, &successors);
     println!("Blocks: {block_starts:?}");
+
+    let dataflow = run_analysis(bytecode.into(), scope, &block_starts);
+
+    println!("Dataflow result: {:?}", dataflow);
 
     todo!();
     let mut buffer = CodeBuffer::new(bytecode.len());

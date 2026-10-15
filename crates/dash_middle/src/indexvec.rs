@@ -1,5 +1,6 @@
 use core::slice;
 use std::alloc::{Layout, alloc, dealloc, handle_alloc_error, realloc};
+use std::fmt::Debug;
 use std::ops::SubAssign;
 use std::ptr::{self, NonNull};
 use std::{cmp, iter, mem, ops};
@@ -116,11 +117,16 @@ pub trait Index {
     fn into_repr(self) -> Self::Repr;
 }
 
-#[derive(Debug)]
 pub struct IndexVec<T, I: Index> {
     ptr: NonNull<T>,
     len: I::Repr,
     cap: I::Repr,
+}
+
+impl<T: Debug, I: Index> Debug for IndexVec<T, I> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_slice().fmt(f)
+    }
 }
 
 impl<T: Clone, I: Index> Clone for IndexVec<T, I> {
@@ -374,6 +380,17 @@ impl<T, I: Index> Drop for IndexVec<T, I> {
                 );
             }
         }
+    }
+}
+
+impl<T, I: Index> FromIterator<T> for IndexVec<T, I> {
+    fn from_iter<U: IntoIterator<Item = T>>(iter: U) -> Self {
+        let iter = iter.into_iter();
+        let mut data = IndexVec::with_capacity(I::Repr::from_usize(iter.size_hint().0));
+        for item in iter {
+            data.push(item);
+        }
+        data
     }
 }
 

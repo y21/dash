@@ -628,6 +628,7 @@ name = "dash_vm"
 version = "0.3.0"
 dependencies = [
  "ahash",
+ "arrayvec",
  "bitflags",
  "criterion",
  "dash_compiler",

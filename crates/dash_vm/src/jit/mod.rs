@@ -1,4 +1,5 @@
 use std::mem::MaybeUninit;
+use std::ops::{Bound, Index, RangeBounds};
 use std::rc::Rc;
 
 use crate::Vm;
@@ -10,6 +11,7 @@ use crate::value::{Unpack, Unrooted, ValueKind};
 
 mod basic_blocks;
 mod compiler;
+mod dataflow;
 mod jumpresolver;
 mod mmap;
 mod state;
@@ -228,5 +230,54 @@ impl Iterator for NoValueExtractContext<'_, '_> {
         } else {
             None
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct BufferRef<'a> {
+    pub buf: &'a [u8],
+}
+
+impl Index<Ip> for BufferRef<'_> {
+    type Output = u8;
+
+    fn index(&self, index: Ip) -> &Self::Output {
+        &self.buf[index.0 as usize]
+    }
+}
+
+impl<'a> BufferRef<'a> {
+    pub fn len(&self) -> u32 {
+        self.buf.len() as u32
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.buf.is_empty()
+    }
+
+    pub fn as_slice(&self) -> &'a [u8] {
+        self.buf
+    }
+
+    pub fn slice(&self, r: impl RangeBounds<Ip>) -> BufferRef<'a> {
+        let start = map_bound_into(r.start_bound(), |&Ip(ip)| ip as usize);
+        let end = map_bound_into(r.end_bound(), |&Ip(ip)| ip as usize);
+        Self {
+            buf: &self.buf[(start, end)],
+        }
+    }
+}
+
+fn map_bound_into<T, U>(t: Bound<T>, mapper: impl Fn(T) -> U) -> Bound<U> {
+    match t {
+        Bound::Included(t) => Bound::Included(mapper(t)),
+        Bound::Excluded(t) => Bound::Excluded(mapper(t)),
+        Bound::Unbounded => Bound::Unbounded,
+    }
+}
+
+impl<'a> From<&'a [u8]> for BufferRef<'a> {
+    fn from(buf: &'a [u8]) -> Self {
+        BufferRef { buf }
     }
 }

@@ -1556,3 +1556,45 @@ impl<S: ExtractSource> ExtractBack<S> for InstructionOperands<S> {
         }
     }
 }
+
+#[derive(Debug)]
+pub enum InstructionSuccessorOffset {
+    Unconditional(i16),
+    Conditional(i16),
+}
+
+impl<S: ExtractSource> InstructionOperands<S> {
+    /// If this is a branch, return the offset
+    pub fn successor(&self) -> Option<InstructionSuccessorOffset> {
+        match *self {
+            InstructionOperands::Jmp(JmpOperands(offset))
+            | InstructionOperands::LoopBackJmp(LoopBackjumpOperands { offset, hotness: _ }) => {
+                Some(InstructionSuccessorOffset::Unconditional(offset))
+            }
+            InstructionOperands::JmpFalseNP(JmpFalseNoPopOperands(ConditionalJumpNoPopOperands {
+                offset,
+                value: _,
+            }))
+            | InstructionOperands::JmpFalseP(JmpFalsePopOperands(ConditionalJumpPopOperands { offset, value: _ }))
+            | InstructionOperands::JmpTrueNP(JmpTrueNoPopOperands(ConditionalJumpNoPopOperands { offset, value: _ }))
+            | InstructionOperands::JmpTrueP(JmpTruePopOperands(ConditionalJumpPopOperands { offset, value: _ }))
+            | InstructionOperands::JmpNullishNP(JmpNullishNoPopOperands(ConditionalJumpNoPopOperands {
+                offset,
+                value: _,
+            }))
+            | InstructionOperands::JmpNullishP(JmpNullishPopOperands(ConditionalJumpPopOperands {
+                offset,
+                value: _,
+            }))
+            | InstructionOperands::JmpUndefinedNP(JmpUndefinedNoPopOperands(ConditionalJumpNoPopOperands {
+                offset,
+                value: _,
+            }))
+            | InstructionOperands::JmpUndefinedP(JmpUndefinedPopOperands(ConditionalJumpPopOperands {
+                offset,
+                value: _,
+            })) => Some(InstructionSuccessorOffset::Conditional(offset)),
+            _ => None,
+        }
+    }
+}
