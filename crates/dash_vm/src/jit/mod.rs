@@ -12,6 +12,7 @@ use crate::value::{Unpack, Unrooted, ValueKind};
 mod basic_blocks;
 mod compiler;
 mod dataflow;
+mod ir;
 mod jumpresolver;
 mod mmap;
 mod state;
@@ -165,8 +166,12 @@ struct NoValueExtractContext<'a, 'vm> {
 }
 
 impl<'a, 'vm> NoValueExtractContext<'a, 'vm> {
-    fn new(bytes: &'a [u8], scope: &'a LocalScope<'vm>) -> Self {
-        Self { bytes, ip: 0, scope }
+    fn new(bytes: &'a [u8], ip: Ip, scope: &'a LocalScope<'vm>) -> Self {
+        Self {
+            bytes,
+            ip: ip.0 as usize,
+            scope,
+        }
     }
 
     pub fn ip(&self) -> Ip {

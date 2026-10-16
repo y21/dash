@@ -17,7 +17,7 @@ use crate::jit::compiler::codebuffer::CodeBuffer;
 use crate::jit::dataflow::run_analysis;
 use crate::jit::jumpresolver::InternalLabel;
 use crate::jit::mmap::MmapFn;
-use crate::jit::{CheckCondition, JitOutData, JitVtable, NoValueExtractContext};
+use crate::jit::{BufferRef, CheckCondition, JitOutData, JitVtable, NoValueExtractContext, ir};
 use crate::localscope::LocalScope;
 
 mod backend;
@@ -79,15 +79,19 @@ fn emit_conditional_jump(
 }
 
 pub fn compile(bytecode: &[u8], scope: &LocalScope<'_>, start: Ip, end: Ip) -> Result<MmapFn, CompileError> {
-    let (successors, predecessors) = successors_predecessors(bytecode, scope);
-    println!("{successors:?}\n{predecessors:?}");
+    let buffer = BufferRef::from(bytecode);
+    let body = ir::lower(buffer, scope);
+    dbg!(&body);
 
-    let block_starts = find_block_starts(&predecessors, &successors);
-    println!("Blocks: {block_starts:?}");
+    // let (successors, predecessors) = successors_predecessors(bytecode, scope);
+    // println!("{successors:?}\n{predecessors:?}");
 
-    let dataflow = run_analysis(bytecode.into(), scope, &block_starts);
+    // let block_starts = find_block_starts(&predecessors, &successors);
+    // println!("Blocks: {block_starts:?}");
 
-    println!("Dataflow result: {:?}", dataflow);
+    // let dataflow = run_analysis(bytecode.into(), scope, &block_starts);
+
+    // println!("Dataflow result: {:?}", dataflow);
 
     todo!();
     let mut buffer = CodeBuffer::new(bytecode.len());
@@ -97,7 +101,7 @@ pub fn compile(bytecode: &[u8], scope: &LocalScope<'_>, start: Ip, end: Ip) -> R
 
     let prologue_data = prologue(&mut buffer, &mut callee_regs);
 
-    let mut cx = NoValueExtractContext::new(bytecode, scope);
+    let mut cx = NoValueExtractContext::new(bytecode, Ip::ZERO, scope);
 
     while let Some((instr_ip, instr)) = cx.next() {
         mark_bytecode_ip(&mut buffer, instr_ip);

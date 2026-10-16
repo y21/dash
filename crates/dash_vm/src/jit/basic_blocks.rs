@@ -35,7 +35,7 @@ pub fn successors_predecessors(bytecode: &[u8], scope: &LocalScope<'_>) -> (Succ
     let mut successors: SuccessorMap = FxHashMap::default();
     let mut predecessors: PredecessorMap = FxHashMap::default();
 
-    let mut cx = NoValueExtractContext::new(bytecode, scope);
+    let mut cx = NoValueExtractContext::new(bytecode, Ip::ZERO, scope);
 
     while let Some((ip_before, instruction)) = cx.next_instruction_with_operands() {
         let ip_after = cx.ip();

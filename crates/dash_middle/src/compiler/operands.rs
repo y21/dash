@@ -67,6 +67,30 @@ pub enum AssignKind<S: ExtractSource> {
     PostfixDecrement,
 }
 
+impl<S: ExtractSource> From<AssignKind<S>> for super::instruction::AssignKind {
+    fn from(kind: AssignKind<S>) -> Self {
+        match kind {
+            AssignKind::Assignment(_) => super::instruction::AssignKind::Assignment,
+            AssignKind::AddAssignment(_) => super::instruction::AssignKind::AddAssignment,
+            AssignKind::SubAssignment(_) => super::instruction::AssignKind::SubAssignment,
+            AssignKind::MulAssignment(_) => super::instruction::AssignKind::MulAssignment,
+            AssignKind::DivAssignment(_) => super::instruction::AssignKind::DivAssignment,
+            AssignKind::RemAssignment(_) => super::instruction::AssignKind::RemAssignment,
+            AssignKind::PowAssignment(_) => super::instruction::AssignKind::PowAssignment,
+            AssignKind::ShlAssignment(_) => super::instruction::AssignKind::ShlAssignment,
+            AssignKind::ShrAssignment(_) => super::instruction::AssignKind::ShrAssignment,
+            AssignKind::UshrAssignment(_) => super::instruction::AssignKind::UshrAssignment,
+            AssignKind::BitAndAssignment(_) => super::instruction::AssignKind::BitAndAssignment,
+            AssignKind::BitOrAssignment(_) => super::instruction::AssignKind::BitOrAssignment,
+            AssignKind::BitXorAssignment(_) => super::instruction::AssignKind::BitXorAssignment,
+            AssignKind::PrefixIncrement => super::instruction::AssignKind::PrefixIncrement,
+            AssignKind::PostfixIncrement => super::instruction::AssignKind::PostfixIncrement,
+            AssignKind::PrefixDecrement => super::instruction::AssignKind::PrefixDecrement,
+            AssignKind::PostfixDecrement => super::instruction::AssignKind::PostfixDecrement,
+        }
+    }
+}
+
 impl<S: ExtractSource> ExtractBack<S> for AssignKind<S> {
     type Exception = Infallible;
 
