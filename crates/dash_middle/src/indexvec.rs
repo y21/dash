@@ -178,6 +178,17 @@ impl<T, I: Index> IndexVec<T, I> {
         vec
     }
 
+    pub fn from_fn<F>(mut f: F, count: I::Repr) -> Self
+    where
+        F: FnMut(I) -> T,
+    {
+        let mut vec = Self::with_capacity(count);
+        for i in 0..count.usize() {
+            vec.push(f(I::from_repr(I::Repr::from_usize(i))));
+        }
+        vec
+    }
+
     #[inline]
     pub fn as_slice(&self) -> &[T] {
         unsafe { slice::from_raw_parts(self.ptr.as_ptr(), self.len.usize()) }

@@ -1,20 +1,10 @@
-use std::collections::hash_map::Entry;
-
 use dash_middle::compiler::instruction::AssignKind;
-use dash_middle::compiler::operands::{
-    ConditionalJumpNoPopOperands, ConditionalJumpPopOperands, InstructionOperands, IntrinsicKind, IntrinsicOperands,
-    JmpFalseNoPopOperands, JmpFalsePopOperands, JmpNullishNoPopOperands, JmpNullishPopOperands, JmpOperands,
-    JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands, JmpUndefinedPopOperands, LdLocalOperands,
-    LoopBackjumpOperands, NumberConstantOperands, NumberConstantWide, NumberInline32, PopOperands, StoreLocalOperands,
-};
 use dash_middle::compiler::scope::BackLocalId;
 use dash_middle::index_type;
 use dash_middle::indexvec::IndexVec;
-use rustc_hash::FxHashMap;
 
-use crate::frame::Ip;
-use crate::jit::{BufferRef, NoValueExtractContext};
-use crate::localscope::LocalScope;
+mod lower;
+pub use lower::lower_body;
 
 index_type! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -48,16 +38,46 @@ pub enum BranchTarget {
     Break,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ConditionalGotoBehavior {
+    Pop,
+    Peek,
+}
+
 #[derive(Debug)]
 pub enum Terminator {
     Goto(BranchTarget),
-    ConditionalGoto { true_: BranchTarget, false_: BranchTarget },
+    ConditionalGoto {
+        true_: BranchTarget,
+        false_: BranchTarget,
+        /// Whether to pop the condition from the stack or peek and keep it
+        behavior: ConditionalGotoBehavior,
+    },
+}
+
+impl Terminator {
+    pub fn for_each_branch_target<F>(&self, mut f: F)
+    where
+        F: FnMut(BranchTarget),
+    {
+        match *self {
+            Terminator::Goto(branch_target) => f(branch_target),
+            Terminator::ConditionalGoto {
+                true_,
+                false_,
+                behavior: _,
+            } => {
+                f(true_);
+                f(false_);
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct BasicBlock {
-    stmts: IndexVec<Stmt, StmtId>,
-    terminator: Option<Terminator>,
+    pub stmts: IndexVec<Stmt, StmtId>,
+    pub terminator: Option<Terminator>,
 }
 
 impl BasicBlock {
@@ -74,129 +94,6 @@ impl BasicBlock {
 
 #[derive(Debug)]
 pub struct Body {
-    blocks: IndexVec<BasicBlock, BasicBlockId>,
-    root: BasicBlockId,
-}
-
-pub fn lower(bytecode: BufferRef<'_>, scope: &LocalScope<'_>) -> Body {
-    fn lower_to_branch_target(
-        bytecode: BufferRef<'_>,
-        ip: Ip,
-        blocks: &mut IndexVec<BasicBlock, BasicBlockId>,
-        ip_to_block: &mut FxHashMap<Ip, BasicBlockId>,
-        scope: &LocalScope<'_>,
-    ) -> BranchTarget {
-        if ip.0 == bytecode.len() {
-            BranchTarget::Break
-        } else {
-            BranchTarget::Block(lower_from_ip(bytecode, ip, blocks, ip_to_block, scope))
-        }
-    }
-
-    fn lower_from_ip(
-        bytecode: BufferRef<'_>,
-        ip: Ip,
-        blocks: &mut IndexVec<BasicBlock, BasicBlockId>,
-        ip_to_block: &mut FxHashMap<Ip, BasicBlockId>,
-        scope: &LocalScope<'_>,
-    ) -> BasicBlockId {
-        let block = match ip_to_block.entry(ip) {
-            Entry::Occupied(entry) => {
-                return *entry.get();
-            }
-            Entry::Vacant(entry) => {
-                let block = blocks.push(BasicBlock::dummy());
-                entry.insert(block);
-                block
-            }
-        };
-
-        let mut stmts = IndexVec::new();
-        let mut terminator = None;
-
-        let mut cx = NoValueExtractContext::new(bytecode.as_slice(), ip, scope);
-        while let Some((instr_ip, instr)) = cx.next_instruction_with_operands() {
-            match instr {
-                InstructionOperands::LdLocal(LdLocalOperands(local)) => {
-                    stmts.push(Stmt::Generic(GenericStmt::LdLocal(local)));
-                }
-                InstructionOperands::IntrinsicOp(IntrinsicOperands(kind)) => match kind {
-                    IntrinsicKind::LtNumLConstR32((), NumberInline32(num)) => {
-                        stmts.push(Stmt::Generic(GenericStmt::LtNumLConstR32(num)));
-                    }
-                    IntrinsicKind::PostfixIncLocalNum(local) => {
-                        stmts.push(Stmt::Generic(GenericStmt::PostfixIncLocalNum(local)));
-                    }
-                    _ => unimplemented!("Intrinsic {kind:?} at {instr_ip:?} is not implemented"),
-                },
-                InstructionOperands::Number(NumberConstantOperands(NumberConstantWide(num))) => {
-                    stmts.push(Stmt::Generic(GenericStmt::Number(num)));
-                }
-                InstructionOperands::StoreLocal(StoreLocalOperands { kind, local }) => {
-                    stmts.push(Stmt::Generic(GenericStmt::StoreLocal {
-                        kind: kind.into(),
-                        local,
-                    }));
-                }
-                InstructionOperands::Pop(PopOperands(())) => {
-                    stmts.push(Stmt::Generic(GenericStmt::Pop));
-                }
-
-                InstructionOperands::Jmp(JmpOperands(offset))
-                | InstructionOperands::LoopBackJmp(LoopBackjumpOperands { offset, hotness: _ }) => {
-                    let target = cx.ip() + offset;
-                    let succ = lower_to_branch_target(bytecode, target, blocks, ip_to_block, scope);
-                    terminator = Some(Terminator::Goto(succ));
-                    break;
-                }
-                InstructionOperands::JmpFalseNP(JmpFalseNoPopOperands(ConditionalJumpNoPopOperands {
-                    offset,
-                    value: _,
-                }))
-                | InstructionOperands::JmpTrueNP(JmpTrueNoPopOperands(ConditionalJumpNoPopOperands {
-                    offset,
-                    value: _,
-                }))
-                | InstructionOperands::JmpNullishNP(JmpNullishNoPopOperands(ConditionalJumpNoPopOperands {
-                    offset,
-                    value: _,
-                }))
-                | InstructionOperands::JmpUndefinedNP(JmpUndefinedNoPopOperands(ConditionalJumpNoPopOperands {
-                    offset,
-                    value: _,
-                }))
-                | InstructionOperands::JmpFalseP(JmpFalsePopOperands(ConditionalJumpPopOperands {
-                    offset,
-                    value: _,
-                }))
-                | InstructionOperands::JmpTrueP(JmpTruePopOperands(ConditionalJumpPopOperands { offset, value: _ }))
-                | InstructionOperands::JmpNullishP(JmpNullishPopOperands(ConditionalJumpPopOperands {
-                    offset,
-                    value: _,
-                }))
-                | InstructionOperands::JmpUndefinedP(JmpUndefinedPopOperands(ConditionalJumpPopOperands {
-                    offset,
-                    value: _,
-                })) => {
-                    let true_target = cx.ip() + offset;
-                    let false_target = cx.ip();
-
-                    let true_ = lower_to_branch_target(bytecode, true_target, blocks, ip_to_block, scope);
-                    let false_ = lower_to_branch_target(bytecode, false_target, blocks, ip_to_block, scope);
-                    terminator = Some(Terminator::ConditionalGoto { true_, false_ });
-                    break;
-                }
-                _ => unimplemented!("Instruction {instr:?} at {instr_ip:?} is not implemented"),
-            }
-        }
-
-        blocks[block] = BasicBlock { stmts, terminator };
-        block
-    }
-
-    let mut blocks = IndexVec::new();
-    let mut ip_to_block = FxHashMap::default();
-    let root = lower_from_ip(bytecode, Ip::ZERO, &mut blocks, &mut ip_to_block, scope);
-
-    Body { blocks, root }
+    pub blocks: IndexVec<BasicBlock, BasicBlockId>,
+    pub root: BasicBlockId,
 }
