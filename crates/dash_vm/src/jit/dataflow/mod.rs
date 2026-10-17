@@ -4,7 +4,9 @@ use dash_middle::indexvec::IndexVec;
 
 use crate::jit::dataflow::join::{Join, JoinChange, join_slice};
 use crate::jit::dataflow::value::{ValueMetadata, ValueType};
-use crate::jit::ir::{BasicBlockId, Body, BranchTarget, ConditionalGotoBehavior, GenericStmt, Stmt, Terminator};
+use crate::jit::ir::{
+    BasicBlockId, Body, BranchTarget, ConditionalGotoBehavior, GenericStmt, Stmt, StmtId, Terminator,
+};
 use crate::localscope::LocalScope;
 use crate::value::{Unpack, ValueKind};
 
@@ -72,6 +74,17 @@ impl DataflowEngine {
         let mut engine = DataflowEngine { entry_states };
         engine.run_analysis(body, &[body.root]);
         engine
+    }
+
+    pub fn block_cursor(&mut self, block: BasicBlockId) -> DataflowBlockCursor<'_> {
+        let state = self.entry_states[block].clone().unwrap();
+        DataflowBlockCursor {
+            engine: self,
+            dirty: false,
+            state,
+            block,
+            stmt: StmtId(0),
+        }
     }
 
     fn run_analysis(&mut self, body: &Body, blocks: &[BasicBlockId]) {
@@ -177,5 +190,102 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
             };
             state.stack.push(out_ty);
         }
+        Stmt::Generic(GenericStmt::Add) => {
+            // Trivial case: both operands are numbers
+            let rhs = state.stack.pop().unwrap();
+            let lhs = state.stack.pop().unwrap();
+            let out_ty = if lhs.ty == ValueType::Number && rhs.ty == ValueType::Number {
+                ValueMetadata { ty: ValueType::Number }
+            } else {
+                ValueMetadata { ty: ValueType::Any }
+            };
+            state.stack.push(out_ty);
+        }
+        Stmt::UncheckedNumberAdd => {
+            let rhs = state.stack.pop().unwrap();
+            let lhs = state.stack.pop().unwrap();
+            let out_ty = ValueMetadata { ty: ValueType::Number };
+            assert!(lhs == out_ty && rhs == out_ty);
+            state.stack.push(out_ty);
+        }
+    }
+}
+
+pub struct DataflowBlockCursor<'a> {
+    /// Whether the local state has actually been mutated and needs to be committed back before dropping the cursor.
+    dirty: bool,
+    /// The current statement at which the cursor is positioned.
+    stmt: StmtId,
+    /// The current state of the block at the cursor's position, possibly mutated (if self.dirty).
+    state: BlockState,
+    /// The basic block in which the cursor is currently positioned.
+    block: BasicBlockId,
+    engine: &'a mut DataflowEngine,
+}
+
+impl<'a> DataflowBlockCursor<'a> {
+    pub fn seek_to_before(&mut self, body: &Body, stmt: StmtId) -> &BlockState {
+        if self.stmt == stmt {
+            &self.state
+        } else if stmt > self.stmt {
+            self.rerun_from_to(body, self.stmt, stmt, false);
+            &self.state
+        } else {
+            unimplemented!("Backward seeking not implemented yet")
+        }
+    }
+
+    fn rerun_from_to(&mut self, body: &Body, from: StmtId, to: StmtId, inclusive: bool) {
+        let stmts = body.blocks[self.block].stmts.as_slice();
+
+        let end = match inclusive {
+            true => StmtId(to.0 + 1),
+            false => to,
+        };
+
+        for stmt in &stmts[(from.0 as usize)..(end.0 as usize)] {
+            apply_stmt(&mut self.state, stmt);
+        }
+
+        self.stmt = end;
+    }
+
+    /// Re-runs dataflow analysis on this block from the the entry up to the specified end statement (exclusive).
+    fn rerun_until(&mut self, body: &Body, end: StmtId) {
+        let entry = self.engine.entry_states[self.block].clone().unwrap();
+        self.state = entry;
+
+        let stmts = body.blocks[self.block].stmts.as_slice();
+        for stmt in &stmts[..end.0 as usize] {
+            println!("[RERUN] Apply {stmt:?}");
+            apply_stmt(&mut self.state, stmt);
+            println!("[RERUN] After: {:?}", self.stmt);
+        }
+    }
+
+    /// Synchronizes the local state with the body up until (including) `at` and marks this block as dirty, reacting to changes that were made to the body.
+    /// This should be called when the body has been mutated in any way (e.g. replacing a statement or adding new ones).
+    /// After a call to this function, you must call commit() before dropping the cursor to avoid losing unsynchronized changes on the local copy.
+    pub fn invalidate_block(&mut self, body: &Body, at: StmtId) {
+        self.dirty = true;
+        // Include the statement at `at` in the re-run since callers will usually pass the just-modified statement.
+        let next = StmtId(at.0 + 1);
+        self.rerun_until(body, next);
+        self.stmt = next;
+    }
+
+    /// Commits any changes made to the local state of this block by propagating it to the successor blocks.
+    /// This should be called after changes and invalidate_block calls before dropping.
+    pub fn commit(&mut self, body: &Body) {
+        if self.dirty {
+            self.dirty = false;
+            self.engine.run_analysis(body, &[self.block]);
+        }
+    }
+}
+
+impl<'a> Drop for DataflowBlockCursor<'a> {
+    fn drop(&mut self) {
+        assert!(!self.dirty, "Dropping a dirty cursor without syncing the block");
     }
 }

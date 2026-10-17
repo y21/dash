@@ -15,6 +15,7 @@ mod dataflow;
 mod ir;
 mod jumpresolver;
 mod mmap;
+mod passes;
 mod state;
 
 pub use compiler::CompileError;

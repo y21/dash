@@ -17,7 +17,7 @@ use crate::jit::compiler::codebuffer::CodeBuffer;
 use crate::jit::dataflow::DataflowEngine;
 use crate::jit::jumpresolver::InternalLabel;
 use crate::jit::mmap::MmapFn;
-use crate::jit::{BufferRef, CheckCondition, JitOutData, JitVtable, NoValueExtractContext, dataflow, ir};
+use crate::jit::{BufferRef, CheckCondition, JitOutData, JitVtable, NoValueExtractContext, dataflow, ir, passes};
 use crate::localscope::LocalScope;
 
 mod backend;
@@ -80,11 +80,15 @@ fn emit_conditional_jump(
 
 pub fn compile(bytecode: &[u8], scope: &LocalScope<'_>, start: Ip, end: Ip) -> Result<MmapFn, CompileError> {
     let buffer = BufferRef::from(bytecode);
-    let body = ir::lower_body(buffer, scope);
+    let mut body = ir::lower_body(buffer, scope);
     dbg!(&body);
-    let dataflow = DataflowEngine::compute(&body, scope);
+
+    let mut dataflow = DataflowEngine::compute(&body, scope);
     println!("Dataflow: {:?}", dataflow);
 
+    passes::run(&mut body, &mut dataflow);
+
+    dbg!(&body);
     // let (successors, predecessors) = successors_predecessors(bytecode, scope);
     // println!("{successors:?}\n{predecessors:?}");
 

@@ -345,6 +345,28 @@ impl<T, I: Index> IndexVec<T, I> {
             .unwrap_or_else(|| handle_alloc_error(new_layout))
             .cast::<T>();
     }
+
+    pub fn iter_indices(&self) -> impl Iterator<Item = I> + use<T, I> {
+        (0..self.len.usize()).map(|i| {
+            let key_repr = unsafe { I::Repr::from_usize_unchecked(i) };
+            I::from_repr(key_repr)
+        })
+    }
+
+    pub fn iter_mut_enumerate(&mut self) -> impl Iterator<Item = (I, &mut T)> {
+        let mut slice = self.as_mut_slice();
+        let mut index = 0;
+
+        iter::from_fn(move || {
+            let Some(value) = slice.split_off_first_mut() else {
+                return None;
+            };
+            let key_repr = unsafe { I::Repr::from_usize_unchecked(index) };
+            let key = I::from_repr(key_repr);
+            index += 1;
+            Some((key, value))
+        })
+    }
 }
 
 impl<T, I: Index> ops::Index<I> for IndexVec<T, I> {

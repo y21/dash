@@ -19,15 +19,18 @@ pub enum GenericStmt {
     Number(f64),
     Pop,
     PostfixIncLocalNum(BackLocalId),
+    Add,
 }
 
 index_type! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub struct StmtId(pub u32);
 }
 
 #[derive(Debug)]
 pub enum Stmt {
+    /// Adds the top two numbers on the stack without any type checks.
+    UncheckedNumberAdd,
     /// Non-specialized, generic statement, directly lowered from source bytecode
     Generic(GenericStmt),
 }
