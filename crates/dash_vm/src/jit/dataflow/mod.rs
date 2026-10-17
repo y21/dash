@@ -5,7 +5,7 @@ use dash_middle::indexvec::IndexVec;
 use crate::jit::dataflow::join::{Join, JoinChange, join_slice};
 use crate::jit::dataflow::value::{ValueMetadata, ValueType};
 use crate::jit::ir::{
-    BasicBlockId, Body, BranchTarget, ConditionalGotoBehavior, GenericStmt, Stmt, StmtId, Terminator,
+    BasicBlockId, Body, BranchTarget, ConditionalGotoPopPolicy, GenericStmt, Stmt, StmtId, Terminator,
 };
 use crate::localscope::LocalScope;
 use crate::value::{Unpack, ValueKind};
@@ -76,9 +76,18 @@ impl DataflowEngine {
         engine
     }
 
-    pub fn block_cursor(&mut self, block: BasicBlockId) -> DataflowBlockCursor<'_> {
+    pub fn block_cursor(&self, block: BasicBlockId) -> DataflowBlockCursor {
         let state = self.entry_states[block].clone().unwrap();
         DataflowBlockCursor {
+            state,
+            block,
+            stmt: StmtId(0),
+        }
+    }
+
+    pub fn block_cursor_mut(&mut self, block: BasicBlockId) -> DataflowBlockCursorMut<'_> {
+        let state = self.entry_states[block].clone().unwrap();
+        DataflowBlockCursorMut {
             engine: self,
             dirty: false,
             state,
@@ -126,81 +135,84 @@ fn apply_terminator(state: &mut BlockState, terminator: &Terminator) {
         Terminator::ConditionalGoto {
             true_: _,
             false_: _,
-            behavior,
+            pop: behavior,
+            condition: _,
         } => match behavior {
-            ConditionalGotoBehavior::Pop => drop(state.stack.pop().unwrap()),
-            ConditionalGotoBehavior::Peek => {}
+            ConditionalGotoPopPolicy::Pop => drop(state.stack.pop().unwrap()),
+            ConditionalGotoPopPolicy::Peek => {}
         },
     }
 }
 
 fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
     match *stmt {
-        Stmt::Generic(GenericStmt::LdLocal(local)) => state.stack.push(state.locals[local].clone()),
-        Stmt::Generic(GenericStmt::LtNumLConstR32(_)) => {
-            state.stack.pop().unwrap();
-            state.stack.push(ValueMetadata { ty: ValueType::Boolean });
-        }
-        Stmt::Generic(GenericStmt::Number(_)) => state.stack.push(ValueMetadata { ty: ValueType::Number }),
-        Stmt::Generic(GenericStmt::Pop) => drop(state.stack.pop().unwrap()),
-        Stmt::Generic(GenericStmt::PostfixIncLocalNum(_)) => state.stack.push(ValueMetadata { ty: ValueType::Number }),
-        Stmt::Generic(GenericStmt::StoreLocal { kind, local }) => {
-            let out_ty = match kind {
-                AssignKind::Assignment => {
-                    let value = state.stack.pop().unwrap();
-                    state.locals[local] = value.clone();
-                    value
-                }
-                AssignKind::AddAssignment
-                | AssignKind::SubAssignment
-                | AssignKind::MulAssignment
-                | AssignKind::DivAssignment
-                | AssignKind::RemAssignment
-                | AssignKind::PowAssignment
-                | AssignKind::ShlAssignment
-                | AssignKind::ShrAssignment
-                | AssignKind::UshrAssignment
-                | AssignKind::BitAndAssignment
-                | AssignKind::BitOrAssignment
-                | AssignKind::BitXorAssignment => {
-                    let rhs = state.stack.pop().unwrap();
+        Stmt::Generic(ref stmt, _) => match *stmt {
+            GenericStmt::LdLocal(local) => state.stack.push(state.locals[local].clone()),
+            GenericStmt::LtNumLConstR32(_) => {
+                state.stack.pop().unwrap();
+                state.stack.push(ValueMetadata { ty: ValueType::Boolean });
+            }
+            GenericStmt::Number(_) => state.stack.push(ValueMetadata { ty: ValueType::Number }),
+            GenericStmt::Pop => drop(state.stack.pop().unwrap()),
+            GenericStmt::PostfixIncLocalNum(_) => state.stack.push(ValueMetadata { ty: ValueType::Number }),
+            GenericStmt::StoreLocal { kind, local } => {
+                let out_ty = match kind {
+                    AssignKind::Assignment => {
+                        let value = state.stack.pop().unwrap();
+                        state.locals[local] = value.clone();
+                        value
+                    }
+                    AssignKind::AddAssignment
+                    | AssignKind::SubAssignment
+                    | AssignKind::MulAssignment
+                    | AssignKind::DivAssignment
+                    | AssignKind::RemAssignment
+                    | AssignKind::PowAssignment
+                    | AssignKind::ShlAssignment
+                    | AssignKind::ShrAssignment
+                    | AssignKind::UshrAssignment
+                    | AssignKind::BitAndAssignment
+                    | AssignKind::BitOrAssignment
+                    | AssignKind::BitXorAssignment => {
+                        let rhs = state.stack.pop().unwrap();
 
-                    // For now just handle the trivial, common case that we can actually make use of: lhs and rhs are both numbers
-                    // Otherwise fall back to any
-                    let metadata = if state.locals[local] == rhs && rhs.ty == ValueType::Number {
-                        ValueMetadata { ty: ValueType::Number }
-                    } else {
-                        ValueMetadata { ty: ValueType::Any }
-                    };
-                    state.locals[local] = metadata;
-                    metadata
-                }
-                AssignKind::PrefixIncrement
-                | AssignKind::PostfixIncrement
-                | AssignKind::PrefixDecrement
-                | AssignKind::PostfixDecrement => {
-                    let metadata = if state.locals[local].ty == ValueType::Number {
-                        ValueMetadata { ty: ValueType::Number }
-                    } else {
-                        ValueMetadata { ty: ValueType::Any }
-                    };
-                    state.locals[local] = metadata;
-                    metadata
-                }
-            };
-            state.stack.push(out_ty);
-        }
-        Stmt::Generic(GenericStmt::Add) => {
-            // Trivial case: both operands are numbers
-            let rhs = state.stack.pop().unwrap();
-            let lhs = state.stack.pop().unwrap();
-            let out_ty = if lhs.ty == ValueType::Number && rhs.ty == ValueType::Number {
-                ValueMetadata { ty: ValueType::Number }
-            } else {
-                ValueMetadata { ty: ValueType::Any }
-            };
-            state.stack.push(out_ty);
-        }
+                        // For now just handle the trivial, common case that we can actually make use of: lhs and rhs are both numbers
+                        // Otherwise fall back to any
+                        let metadata = if state.locals[local] == rhs && rhs.ty == ValueType::Number {
+                            ValueMetadata { ty: ValueType::Number }
+                        } else {
+                            ValueMetadata { ty: ValueType::Any }
+                        };
+                        state.locals[local] = metadata;
+                        metadata
+                    }
+                    AssignKind::PrefixIncrement
+                    | AssignKind::PostfixIncrement
+                    | AssignKind::PrefixDecrement
+                    | AssignKind::PostfixDecrement => {
+                        let metadata = if state.locals[local].ty == ValueType::Number {
+                            ValueMetadata { ty: ValueType::Number }
+                        } else {
+                            ValueMetadata { ty: ValueType::Any }
+                        };
+                        state.locals[local] = metadata;
+                        metadata
+                    }
+                };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::Add => {
+                // Trivial case: both operands are numbers
+                let rhs = state.stack.pop().unwrap();
+                let lhs = state.stack.pop().unwrap();
+                let out_ty = if lhs.ty == ValueType::Number && rhs.ty == ValueType::Number {
+                    ValueMetadata { ty: ValueType::Number }
+                } else {
+                    ValueMetadata { ty: ValueType::Any }
+                };
+                state.stack.push(out_ty);
+            }
+        },
         Stmt::UncheckedNumberAdd => {
             let rhs = state.stack.pop().unwrap();
             let lhs = state.stack.pop().unwrap();
@@ -211,7 +223,42 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
     }
 }
 
-pub struct DataflowBlockCursor<'a> {
+pub struct DataflowBlockCursor {
+    stmt: StmtId,
+    state: BlockState,
+    block: BasicBlockId,
+}
+
+impl DataflowBlockCursor {
+    pub fn seek_to_before_stmt(&mut self, body: &Body, stmt: StmtId) -> &BlockState {
+        if self.stmt == stmt {
+            &self.state
+        } else if stmt > self.stmt {
+            self.rerun_from_to(body, self.stmt, stmt, false);
+            &self.state
+        } else {
+            unimplemented!("Backward seeking not implemented yet")
+        }
+    }
+
+    fn rerun_from_to(&mut self, body: &Body, from: StmtId, to: StmtId, inclusive: bool) {
+        let stmts = body.blocks[self.block].stmts.as_slice();
+
+        let end = match inclusive {
+            true => StmtId(to.0 + 1),
+            false => to,
+        };
+
+        for stmt in &stmts[(from.0 as usize)..(end.0 as usize)] {
+            apply_stmt(&mut self.state, stmt);
+        }
+
+        self.stmt = end;
+    }
+}
+
+// TODO: store an immutable DataflowBlockCursor and delegate to its methods instead of reimplementing them twice (seeking)
+pub struct DataflowBlockCursorMut<'a> {
     /// Whether the local state has actually been mutated and needs to be committed back before dropping the cursor.
     dirty: bool,
     /// The current statement at which the cursor is positioned.
@@ -223,7 +270,7 @@ pub struct DataflowBlockCursor<'a> {
     engine: &'a mut DataflowEngine,
 }
 
-impl<'a> DataflowBlockCursor<'a> {
+impl<'a> DataflowBlockCursorMut<'a> {
     pub fn seek_to_before(&mut self, body: &Body, stmt: StmtId) -> &BlockState {
         if self.stmt == stmt {
             &self.state
@@ -284,7 +331,7 @@ impl<'a> DataflowBlockCursor<'a> {
     }
 }
 
-impl<'a> Drop for DataflowBlockCursor<'a> {
+impl<'a> Drop for DataflowBlockCursorMut<'a> {
     fn drop(&mut self) {
         assert!(!self.dirty, "Dropping a dirty cursor without syncing the block");
     }

@@ -36,7 +36,8 @@ use std::mem::offset_of;
 use crate::frame::Ip;
 use crate::jit::JitVtable;
 use crate::jit::compiler::codebuffer::CodeBuffer;
-use crate::jit::jumpresolver::{CpuIp, InternalLabel, PatchSite};
+use crate::jit::compiler::jumpresolver::{CpuIp, PatchData, SyntheticLabel};
+use crate::jit::ir::BasicBlockId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[expect(dead_code)]
@@ -172,7 +173,7 @@ pub struct PrologueData {
     pub out_data_rbp_offset: i8,
 }
 
-pub fn prologue(buf: &mut CodeBuffer, callee_regs: &mut Vec<Register>) -> PrologueData {
+pub fn codegen_prologue(buf: &mut CodeBuffer, callee_regs: &mut Vec<Register>) -> PrologueData {
     let stub_csreg = callee_regs.pop().unwrap();
     let vtable_csreg = callee_regs.pop().unwrap();
     let vm_csreg = callee_regs.pop().unwrap();
@@ -204,7 +205,7 @@ pub fn prologue(buf: &mut CodeBuffer, callee_regs: &mut Vec<Register>) -> Prolog
     }
 }
 
-pub fn epilogue(buf: &mut CodeBuffer, prologue_data: &PrologueData) {
+pub fn codegen_epilogue(buf: &mut CodeBuffer, prologue_data: &PrologueData) {
     add_rsp_imm8(buf, 8); // rdx - not a callee saved register and we have the return payload in that reg already, so just discard directly
     pop(buf, prologue_data.vtable_csreg);
     pop(buf, prologue_data.stub_csreg);
@@ -354,66 +355,68 @@ pub fn cmp_reg_al_imm8(buf: &mut CodeBuffer, imm: u8) {
     buf.push(imm);
 }
 
-pub fn jne_imm32(buf: &mut CodeBuffer, offset: i32) {
+pub fn jne_imm32(buf: &mut CodeBuffer, offset: i32) -> CpuIp {
     buf.push(0x0f);
     buf.push(opcodes::JNE_REL32);
+    let offset_ip = buf.offset();
     buf.extend_from_slice(&offset.to_le_bytes());
+    offset_ip
 }
 
-pub fn je_imm32(buf: &mut CodeBuffer, offset: i32) {
+pub fn je_imm32(buf: &mut CodeBuffer, offset: i32) -> CpuIp {
     buf.push(0x0f);
     buf.push(opcodes::JE_REL32);
+    let offset_ip = buf.offset();
     buf.extend_from_slice(&offset.to_le_bytes());
+    offset_ip
 }
 
-pub fn jne_bytecode_ip(buf: &mut CodeBuffer, target_bc_ip: Ip) {
-    let patch_site = buf.offset() + 2;
-    if let Some(target_x86_ip) = buf.jumps.add_user_reference(target_bc_ip, patch_site) {
-        jne_imm32(buf, 0);
-        patch_rel32(buf, patch_site, target_x86_ip);
-    } else {
-        jne_imm32(buf, 0);
-    }
-}
-
-pub fn je_bytecode_ip(buf: &mut CodeBuffer, target_bc_ip: Ip) {
-    let patch_site = buf.offset() + 2;
-    if let Some(target_x86_ip) = buf.jumps.add_user_reference(target_bc_ip, patch_site) {
-        je_imm32(buf, 0);
-        patch_rel32(buf, patch_site, target_x86_ip);
-    } else {
-        je_imm32(buf, 0);
-    }
-}
-
-pub fn jne_internal_label(buf: &mut CodeBuffer, label: InternalLabel) {
-    let patch_site = buf.offset() + 2;
-    jne_imm32(buf, 0);
-    if let Some(target_x86_ip) = buf.jumps.add_internal_reference(label, patch_site) {
+pub fn jne_block(buf: &mut CodeBuffer, target: BasicBlockId) {
+    let patch_site = jne_imm32(buf, 0);
+    if let Some(target_x86_ip) = buf.jumps.add_user_reference(target, patch_site) {
         patch_rel32(buf, patch_site, target_x86_ip);
     }
 }
 
-pub fn jmp_internal_label(buf: &mut CodeBuffer, label: InternalLabel) {
-    let patch_site = buf.offset() + 1;
-    jmp_imm32(buf, 0);
-    if let Some(target_x86_ip) = buf.jumps.add_internal_reference(label, patch_site) {
+pub fn je_block(buf: &mut CodeBuffer, target: BasicBlockId) {
+    let patch_site = je_imm32(buf, 0);
+    if let Some(target_x86_ip) = buf.jumps.add_user_reference(target, patch_site) {
         patch_rel32(buf, patch_site, target_x86_ip);
     }
 }
 
-pub fn jmp_imm32(buf: &mut CodeBuffer, offset: i32) {
+pub fn je_synthetic_label(buf: &mut CodeBuffer, label: SyntheticLabel) {
+    let patch_site = je_imm32(buf, 0);
+    if let Some(target_x86_ip) = buf.jumps.add_synthetic_reference(label, patch_site) {
+        patch_rel32(buf, patch_site, target_x86_ip);
+    }
+}
+
+pub fn jne_synthetic_label(buf: &mut CodeBuffer, label: SyntheticLabel) {
+    let patch_site = jne_imm32(buf, 0);
+    if let Some(target_x86_ip) = buf.jumps.add_synthetic_reference(label, patch_site) {
+        patch_rel32(buf, patch_site, target_x86_ip);
+    }
+}
+
+pub fn jmp_synthetic_label(buf: &mut CodeBuffer, label: SyntheticLabel) {
+    let patch_site = jmp_imm32(buf, 0);
+    if let Some(target_x86_ip) = buf.jumps.add_synthetic_reference(label, patch_site) {
+        patch_rel32(buf, patch_site, target_x86_ip);
+    }
+}
+
+pub fn jmp_imm32(buf: &mut CodeBuffer, offset: i32) -> CpuIp {
     buf.push(opcodes::JMP_REL32);
+    let offset_ip = buf.offset();
     buf.extend_from_slice(&offset.to_le_bytes());
+    offset_ip
 }
 
-pub fn jmp_bytecode_ip(buf: &mut CodeBuffer, target_bc_ip: Ip) {
-    let patch_site = buf.offset() + 1;
-    if let Some(target_x86_ip) = buf.jumps.add_user_reference(target_bc_ip, patch_site) {
-        jmp_imm32(buf, 0);
+pub fn jmp_block(buf: &mut CodeBuffer, target: BasicBlockId) {
+    let patch_site = jmp_imm32(buf, 0);
+    if let Some(target_x86_ip) = buf.jumps.add_user_reference(target, patch_site) {
         patch_rel32(buf, patch_site, target_x86_ip);
-    } else {
-        jmp_imm32(buf, 0);
     }
 }
 
@@ -438,27 +441,37 @@ pub fn lea_reg_mem(buf: &mut CodeBuffer, dest: Register, base: Register, offset:
     buf.push(offset as u8);
 }
 
-fn patch_rel32(buf: &mut CodeBuffer, patch_site: PatchSite, target: CpuIp) {
+fn patch_rel32(buf: &mut CodeBuffer, patch_site: CpuIp, target: CpuIp) {
     let patch_site = patch_site as usize;
     let disp = target as i64 - (patch_site as i64 + 4);
     let disp = i32::try_from(disp).expect("rel32 displacement out of range");
     buf.buffer[patch_site..patch_site + 4].copy_from_slice(&disp.to_le_bytes());
 }
 
-fn patch_sites_to(buf: &mut CodeBuffer, patch_sites: Vec<PatchSite>, target: CpuIp) {
+fn patch_sites_to(buf: &mut CodeBuffer, patch_sites: Vec<CpuIp>, target: CpuIp) {
     for patch_site in patch_sites {
         patch_rel32(buf, patch_site, target);
     }
 }
 
-pub fn mark_bytecode_ip(buf: &mut CodeBuffer, bc_ip: Ip) {
+pub fn register_user_block(buf: &mut CodeBuffer, block: BasicBlockId) -> bool {
     let x86_ip = buf.offset();
-    let patch_sites = buf.jumps.resolve_user_label(bc_ip, x86_ip);
-    patch_sites_to(buf, patch_sites, x86_ip);
+    match buf.jumps.register_user_label(block, x86_ip) {
+        PatchData::Unresolved { references } => {
+            patch_sites_to(buf, references, x86_ip);
+            true
+        }
+        PatchData::Resolved { ip: _ } => false,
+    }
 }
 
-pub fn mark_internal_label(buf: &mut CodeBuffer, label: InternalLabel) {
+pub fn register_synthetic_block(buf: &mut CodeBuffer, label: SyntheticLabel) -> bool {
     let x86_ip = buf.offset();
-    let patch_sites = buf.jumps.resolve_internal_label(label, x86_ip);
-    patch_sites_to(buf, patch_sites, x86_ip);
+    match buf.jumps.register_synthetic_label(label, x86_ip) {
+        PatchData::Unresolved { references } => {
+            patch_sites_to(buf, references, x86_ip);
+            true
+        }
+        PatchData::Resolved { ip: _ } => false,
+    }
 }

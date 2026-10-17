@@ -1,4 +1,5 @@
-use crate::jit::jumpresolver::{CpuIp, JumpResolver};
+use crate::jit::compiler::jumpresolver::{CpuIp, JumpResolver};
+use crate::jit::ir::Body;
 
 pub struct CodeBuffer {
     pub buffer: Vec<u8>,
@@ -6,10 +7,10 @@ pub struct CodeBuffer {
 }
 
 impl CodeBuffer {
-    pub fn new(bytecode_len: usize) -> Self {
+    pub fn new(body: &Body) -> Self {
         Self {
             buffer: Vec::new(),
-            jumps: JumpResolver::new(bytecode_len),
+            jumps: JumpResolver::new(body),
         }
     }
 

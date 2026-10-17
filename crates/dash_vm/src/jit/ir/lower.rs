@@ -12,7 +12,8 @@ use rustc_hash::FxHashMap;
 
 use crate::frame::Ip;
 use crate::jit::ir::{
-    BasicBlock, BasicBlockId, Body, BranchTarget, ConditionalGotoBehavior, GenericStmt, Stmt, Terminator,
+    BasicBlock, BasicBlockId, Body, BranchTarget, ConditionalGotoCondition, ConditionalGotoPopPolicy, GenericStmt,
+    Stmt, Terminator,
 };
 use crate::jit::{BufferRef, NoValueExtractContext};
 use crate::localscope::LocalScope;
@@ -24,7 +25,8 @@ fn create_terminator(
     scope: &LocalScope<'_>,
     cx: &mut NoValueExtractContext<'_, '_>,
     offset: i16,
-    behavior: ConditionalGotoBehavior,
+    pop: ConditionalGotoPopPolicy,
+    condition: ConditionalGotoCondition,
 ) -> Terminator {
     let true_target = cx.ip() + offset;
     let false_target = cx.ip();
@@ -34,7 +36,8 @@ fn create_terminator(
     Terminator::ConditionalGoto {
         true_,
         false_,
-        behavior,
+        pop,
+        condition,
     }
 }
 
@@ -77,31 +80,34 @@ fn lower_from_ip(
     while let Some((instr_ip, instr)) = cx.next_instruction_with_operands() {
         match instr {
             InstructionOperands::LdLocal(LdLocalOperands(local)) => {
-                stmts.push(Stmt::Generic(GenericStmt::LdLocal(local)));
+                stmts.push(Stmt::Generic(GenericStmt::LdLocal(local), instr_ip));
             }
             InstructionOperands::IntrinsicOp(IntrinsicOperands(kind)) => match kind {
                 IntrinsicKind::LtNumLConstR32((), NumberInline32(num)) => {
-                    stmts.push(Stmt::Generic(GenericStmt::LtNumLConstR32(num)));
+                    stmts.push(Stmt::Generic(GenericStmt::LtNumLConstR32(num), instr_ip));
                 }
                 IntrinsicKind::PostfixIncLocalNum(local) => {
-                    stmts.push(Stmt::Generic(GenericStmt::PostfixIncLocalNum(local)));
+                    stmts.push(Stmt::Generic(GenericStmt::PostfixIncLocalNum(local), instr_ip));
                 }
                 _ => unimplemented!("Intrinsic {kind:?} at {instr_ip:?} is not implemented"),
             },
             InstructionOperands::Number(NumberConstantOperands(NumberConstantWide(num))) => {
-                stmts.push(Stmt::Generic(GenericStmt::Number(num)));
+                stmts.push(Stmt::Generic(GenericStmt::Number(num), instr_ip));
             }
             InstructionOperands::StoreLocal(StoreLocalOperands { kind, local }) => {
-                stmts.push(Stmt::Generic(GenericStmt::StoreLocal {
-                    kind: kind.into(),
-                    local,
-                }));
+                stmts.push(Stmt::Generic(
+                    GenericStmt::StoreLocal {
+                        kind: kind.into(),
+                        local,
+                    },
+                    instr_ip,
+                ));
             }
             InstructionOperands::Pop(PopOperands(())) => {
-                stmts.push(Stmt::Generic(GenericStmt::Pop));
+                stmts.push(Stmt::Generic(GenericStmt::Pop, instr_ip));
             }
             InstructionOperands::Add(AddOperands(BinaryOperator { left: (), right: () })) => {
-                stmts.push(Stmt::Generic(GenericStmt::Add));
+                stmts.push(Stmt::Generic(GenericStmt::Add, instr_ip));
             }
             InstructionOperands::Jmp(JmpOperands(offset))
             | InstructionOperands::LoopBackJmp(LoopBackjumpOperands { offset, hotness: _ }) => {
@@ -113,15 +119,6 @@ fn lower_from_ip(
             InstructionOperands::JmpFalseNP(JmpFalseNoPopOperands(ConditionalJumpNoPopOperands {
                 offset,
                 value: _,
-            }))
-            | InstructionOperands::JmpTrueNP(JmpTrueNoPopOperands(ConditionalJumpNoPopOperands { offset, value: _ }))
-            | InstructionOperands::JmpNullishNP(JmpNullishNoPopOperands(ConditionalJumpNoPopOperands {
-                offset,
-                value: _,
-            }))
-            | InstructionOperands::JmpUndefinedNP(JmpUndefinedNoPopOperands(ConditionalJumpNoPopOperands {
-                offset,
-                value: _,
             })) => {
                 terminator = Some(create_terminator(
                     bytecode,
@@ -130,17 +127,25 @@ fn lower_from_ip(
                     scope,
                     &mut cx,
                     offset,
-                    ConditionalGotoBehavior::Peek,
+                    ConditionalGotoPopPolicy::Peek,
+                    ConditionalGotoCondition::IsFalsy,
                 ));
                 break;
             }
-            InstructionOperands::JmpFalseP(JmpFalsePopOperands(ConditionalJumpPopOperands { offset, value: _ }))
-            | InstructionOperands::JmpTrueP(JmpTruePopOperands(ConditionalJumpPopOperands { offset, value: _ }))
-            | InstructionOperands::JmpNullishP(JmpNullishPopOperands(ConditionalJumpPopOperands {
-                offset,
-                value: _,
-            }))
-            | InstructionOperands::JmpUndefinedP(JmpUndefinedPopOperands(ConditionalJumpPopOperands {
+            InstructionOperands::JmpTrueNP(JmpTrueNoPopOperands(ConditionalJumpNoPopOperands { offset, value: _ })) => {
+                terminator = Some(create_terminator(
+                    bytecode,
+                    blocks,
+                    ip_to_block,
+                    scope,
+                    &mut cx,
+                    offset,
+                    ConditionalGotoPopPolicy::Peek,
+                    ConditionalGotoCondition::IsTruthy,
+                ));
+                break;
+            }
+            InstructionOperands::JmpNullishNP(JmpNullishNoPopOperands(ConditionalJumpNoPopOperands {
                 offset,
                 value: _,
             })) => {
@@ -151,7 +156,82 @@ fn lower_from_ip(
                     scope,
                     &mut cx,
                     offset,
-                    ConditionalGotoBehavior::Pop,
+                    ConditionalGotoPopPolicy::Peek,
+                    ConditionalGotoCondition::IsNullish,
+                ));
+                break;
+            }
+            InstructionOperands::JmpUndefinedNP(JmpUndefinedNoPopOperands(ConditionalJumpNoPopOperands {
+                offset,
+                value: _,
+            })) => {
+                terminator = Some(create_terminator(
+                    bytecode,
+                    blocks,
+                    ip_to_block,
+                    scope,
+                    &mut cx,
+                    offset,
+                    ConditionalGotoPopPolicy::Peek,
+                    ConditionalGotoCondition::IsUndefined,
+                ));
+                break;
+            }
+            InstructionOperands::JmpFalseP(JmpFalsePopOperands(ConditionalJumpPopOperands { offset, value: _ })) => {
+                terminator = Some(create_terminator(
+                    bytecode,
+                    blocks,
+                    ip_to_block,
+                    scope,
+                    &mut cx,
+                    offset,
+                    ConditionalGotoPopPolicy::Pop,
+                    ConditionalGotoCondition::IsFalsy,
+                ));
+                break;
+            }
+            InstructionOperands::JmpTrueP(JmpTruePopOperands(ConditionalJumpPopOperands { offset, value: _ })) => {
+                terminator = Some(create_terminator(
+                    bytecode,
+                    blocks,
+                    ip_to_block,
+                    scope,
+                    &mut cx,
+                    offset,
+                    ConditionalGotoPopPolicy::Pop,
+                    ConditionalGotoCondition::IsTruthy,
+                ));
+                break;
+            }
+            InstructionOperands::JmpNullishP(JmpNullishPopOperands(ConditionalJumpPopOperands {
+                offset,
+                value: _,
+            })) => {
+                terminator = Some(create_terminator(
+                    bytecode,
+                    blocks,
+                    ip_to_block,
+                    scope,
+                    &mut cx,
+                    offset,
+                    ConditionalGotoPopPolicy::Pop,
+                    ConditionalGotoCondition::IsNullish,
+                ));
+                break;
+            }
+            InstructionOperands::JmpUndefinedP(JmpUndefinedPopOperands(ConditionalJumpPopOperands {
+                offset,
+                value: _,
+            })) => {
+                terminator = Some(create_terminator(
+                    bytecode,
+                    blocks,
+                    ip_to_block,
+                    scope,
+                    &mut cx,
+                    offset,
+                    ConditionalGotoPopPolicy::Pop,
+                    ConditionalGotoCondition::IsUndefined,
                 ));
                 break;
             }

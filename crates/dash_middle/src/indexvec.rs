@@ -123,6 +123,12 @@ pub struct IndexVec<T, I: Index> {
     cap: I::Repr,
 }
 
+impl<T, I: Index> Default for IndexVec<T, I> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Debug, I: Index> Debug for IndexVec<T, I> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.as_slice().fmt(f)

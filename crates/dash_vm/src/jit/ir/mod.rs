@@ -6,6 +6,8 @@ use dash_middle::indexvec::IndexVec;
 mod lower;
 pub use lower::lower_body;
 
+use crate::frame::Ip;
+
 index_type! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct BasicBlockId(pub u32);
@@ -32,7 +34,7 @@ pub enum Stmt {
     /// Adds the top two numbers on the stack without any type checks.
     UncheckedNumberAdd,
     /// Non-specialized, generic statement, directly lowered from source bytecode
-    Generic(GenericStmt),
+    Generic(GenericStmt, Ip),
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -42,9 +44,19 @@ pub enum BranchTarget {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ConditionalGotoBehavior {
+#[repr(C)]
+pub enum ConditionalGotoPopPolicy {
     Pop,
     Peek,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(C)]
+pub enum ConditionalGotoCondition {
+    IsFalsy,
+    IsTruthy,
+    IsNullish,
+    IsUndefined,
 }
 
 #[derive(Debug)]
@@ -54,7 +66,8 @@ pub enum Terminator {
         true_: BranchTarget,
         false_: BranchTarget,
         /// Whether to pop the condition from the stack or peek and keep it
-        behavior: ConditionalGotoBehavior,
+        pop: ConditionalGotoPopPolicy,
+        condition: ConditionalGotoCondition,
     },
 }
 
@@ -68,7 +81,8 @@ impl Terminator {
             Terminator::ConditionalGoto {
                 true_,
                 false_,
-                behavior: _,
+                pop: _,
+                condition: _,
             } => {
                 f(true_);
                 f(false_);

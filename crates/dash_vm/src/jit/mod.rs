@@ -5,6 +5,7 @@ use std::rc::Rc;
 use crate::Vm;
 use crate::dispatch::{DispatchContext, INSTRUCTION_LUT};
 use crate::frame::Ip;
+use crate::jit::ir::{ConditionalGotoCondition, ConditionalGotoPopPolicy};
 use crate::jit::mmap::MmapFn;
 use crate::localscope::LocalScope;
 use crate::value::{Unpack, Unrooted, ValueKind};
@@ -13,17 +14,18 @@ mod basic_blocks;
 mod compiler;
 mod dataflow;
 mod ir;
-mod jumpresolver;
 mod mmap;
 mod passes;
 mod state;
 
-pub use compiler::CompileError;
 use dash_middle::compiler::constant::ConstantPool;
 use dash_middle::compiler::extract::{ExtractSource, extract_back_infallible};
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::operands::InstructionOperands;
 pub use state::State;
+
+#[derive(Debug)]
+pub enum CompileError {}
 
 #[derive(Debug)]
 pub struct JitFnHandle(Rc<MmapFn>);
@@ -114,21 +116,25 @@ enum CheckCondition {
 #[repr(C)]
 struct JitVtable {
     stub_fn: extern "C" fn(&mut Vm, *mut JitOutData, u8, u32) -> HandlerStubReturn,
-    check_last_value: extern "C" fn(&mut Vm, bool, CheckCondition) -> bool,
+    check_last_value: extern "C" fn(&mut Vm, ConditionalGotoPopPolicy, ConditionalGotoCondition) -> bool,
 }
 
-extern "C" fn check_last_value(vm: &mut Vm, pop: bool, check: CheckCondition) -> bool {
-    let value = vm.stack.last().unwrap().clone();
-
-    let result = match check {
-        CheckCondition::Truthy => value.is_truthy(vm),
-        CheckCondition::Nullish => value.is_nullish(),
-        CheckCondition::Undefined => matches!(value.unpack(), ValueKind::Undefined(_)),
+extern "C" fn check_last_value(
+    vm: &mut Vm,
+    pop: ConditionalGotoPopPolicy,
+    condition: ConditionalGotoCondition,
+) -> bool {
+    let value = match pop {
+        ConditionalGotoPopPolicy::Pop => vm.stack.pop().unwrap(),
+        ConditionalGotoPopPolicy::Peek => *vm.stack.last().unwrap(),
     };
-    if pop {
-        vm.stack.pop();
+
+    match condition {
+        ConditionalGotoCondition::IsFalsy => !value.is_truthy(vm),
+        ConditionalGotoCondition::IsTruthy => value.is_truthy(vm),
+        ConditionalGotoCondition::IsNullish => value.is_nullish(),
+        ConditionalGotoCondition::IsUndefined => matches!(value.unpack(), ValueKind::Undefined(_)),
     }
-    result
 }
 
 static JIT_VTABLE: JitVtable = JitVtable {
@@ -150,10 +156,18 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Re
     } else {
         let func = Rc::new(scope.frames.with_current_bytecode(|bytecode| {
             let bytecode = &bytecode[start.0 as usize..end.0 as usize];
+            let bytecode = BufferRef::from(bytecode);
 
-            compiler::compile(bytecode, scope, start, end)
+            let mut body = ir::lower_body(bytecode, scope);
+            let mut dataflow = dataflow::DataflowEngine::compute(&body, scope);
+            // passes::run(&mut body, &mut dataflow); // For now
+
+            let mmap_fn = compiler::compile(&body, start, end, &dataflow);
+
+            Ok::<_, CompileError>(mmap_fn)
         })?);
 
+        // TODO(idea): cache compiled fns (and other metadata like dataflow analysis?) on disk?
         scope.jit.compiled_fn_cache.insert(key, Rc::clone(&func));
         Ok(JitFnHandle(func))
     }

@@ -107,6 +107,14 @@ impl Add<u32> for Ip {
     }
 }
 
+impl Add for Ip {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
 impl Add<i16> for Ip {
     type Output = Self;
 
