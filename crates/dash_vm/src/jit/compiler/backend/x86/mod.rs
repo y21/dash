@@ -33,7 +33,8 @@ mod opcodes {
     pub const MOVSD_REG_RM: &[u8] = &[0x0F, 0x10];
     pub const ADDSD_REG_RM: &[u8] = &[0x0F, 0x58];
     pub const MOVSD_RM_REG: &[u8] = &[0x0F, 0x11];
-    pub const DEC_RM64: u8 = 0xff;
+    pub const DEC_RM64: u8 = 0xFF;
+    pub const CALL_RM64: u8 = 0xFF;
 }
 
 use std::mem::offset_of;
@@ -279,7 +280,7 @@ pub struct PrologueData {
     pub stub_csreg: Register,
     pub vtable_csreg: Register,
     pub vm_csreg: Register,
-    pub out_data_rbp_offset: i8,
+    pub out_data_rbp_offset: i32,
 }
 
 pub fn codegen_prologue(buf: &mut CodeBuffer, callee_regs: &mut Vec<Register>) -> PrologueData {
@@ -299,7 +300,7 @@ pub fn codegen_prologue(buf: &mut CodeBuffer, callee_regs: &mut Vec<Register>) -
     // END OF STACK
 
     // The stub fn is very hot, so put it in a callee-saved register
-    mov_reg_mem_u8(
+    mov_reg_mem(
         buf,
         stub_csreg,
         Register::Rsi,
@@ -324,26 +325,11 @@ pub fn codegen_epilogue(buf: &mut CodeBuffer, prologue_data: &PrologueData) {
 }
 
 pub fn mov_reg_reg(buf: &mut CodeBuffer, dest: Register, src: Register) {
-    let mut rex = 0;
-
-    if dest.needs_rex_prefix() {
-        rex |= rex::B;
-    }
-    if src.needs_rex_prefix() {
-        rex |= rex::R;
-    }
+    let mut encoding = encode_modrm_reg_reg(RegField::Reg(src), dest);
     if dest.join_register_size(src) == 64 {
-        rex |= rex::W;
+        encoding.rex |= Rex::W;
     }
-
-    if rex != 0 {
-        buf.push(rex::BASE | rex);
-    }
-
-    buf.push(opcodes::MOV_RM_R);
-
-    let modrm = modrm::MOD_R | (src.reg_field() << 3) | dest.reg_field();
-    buf.push(modrm);
+    encoding.write_into(buf, &[opcodes::MOV_RM_R]);
 }
 
 pub fn push(buf: &mut CodeBuffer, reg: Register) {
@@ -354,28 +340,12 @@ pub fn push(buf: &mut CodeBuffer, reg: Register) {
 }
 
 /// Encodes `mov <dest reg>, [<base reg> + <offset imm8>]`
-pub fn mov_reg_mem_u8(buf: &mut CodeBuffer, dest: Register, base: Register, offset: i8) {
-    let mut rex = 0;
-    if base.needs_rex_prefix() {
-        rex |= rex::B;
+pub fn mov_reg_mem(buf: &mut CodeBuffer, dest: Register, base: Register, offset: i32) {
+    let mut encoding = encode_modrm_reg_mem(RegField::Reg(dest), Mem::RegDispImm(base, offset));
+    if dest.size_bits() == 64 {
+        encoding.rex |= Rex::W;
     }
-    if dest.needs_rex_prefix() {
-        rex |= rex::R;
-    }
-    if dest.join_register_size(base) == 64 {
-        rex |= rex::W;
-    }
-
-    if rex != 0 {
-        buf.push(rex::BASE | rex);
-    }
-
-    buf.push(opcodes::MOV_R_RM);
-
-    let modrm = modrm::MOD_M8 | (dest.reg_field() << 3) | base.reg_field(); // base should be using dest.rm_field()!!
-    buf.push(modrm);
-
-    buf.push(offset as u8);
+    encoding.write_into(buf, &[opcodes::MOV_R_RM]);
 }
 
 pub enum Scale {
@@ -422,7 +392,11 @@ struct ModrmEncoding {
 
 impl ModrmEncoding {
     fn write_into(self, buf: &mut CodeBuffer, opcode: &[u8]) {
-        buf.push(self.rex.0);
+        assert!((self.rex.0 & Rex::BASE.0) == Rex::BASE.0);
+
+        if self.rex != Rex::BASE {
+            buf.push(self.rex.0);
+        }
         buf.extend_from_slice(opcode);
         buf.push(self.modrm);
         if let Some(sib) = self.sib {
@@ -446,7 +420,9 @@ fn encode_modrm_reg_reg(reg: RegField, rm: Register) -> ModrmEncoding {
 
     let reg_bits = match reg {
         RegField::Reg(register) => {
-            rex |= Rex::R;
+            if register.needs_rex_prefix() {
+                rex |= Rex::R;
+            }
             register.reg_field()
         }
         RegField::Bits(bits) => bits,
@@ -499,15 +475,14 @@ fn encode_modrm_reg_mem(reg: RegField, rm: Mem) -> ModrmEncoding {
 
             if let Ok(imm) = i8::try_from(imm) {
                 let rm = reg.rm_field();
-                modrm |= rm;
+                modrm |= modrm::MOD_M8 | rm;
+
+                let disp = ArrayVec::<u8, 4>::try_from([imm as u8].as_slice()).unwrap();
 
                 if rm == Register::RM_FIELD_NEEDS_SIB {
-                    (
-                        Some(build_sib(Scale::X1, None, reg)),
-                        ArrayVec::<u8, 4>::try_from([imm as u8].as_slice()).unwrap(),
-                    )
+                    (Some(build_sib(Scale::X1, None, reg)), disp)
                 } else {
-                    (None, ArrayVec::new())
+                    (None, disp)
                 }
             } else {
                 unimplemented!()
@@ -589,6 +564,16 @@ fn test_movsd() {
                );
     */
     // mov_reg_mem_u8(&mut cb, Register::Rax, Register::R12, 8);
+    // mov_reg_reg(&mut cb, Register::Rax, Register::R14);
+    // mov_reg_mem(&mut cb, Register::R10, Register::R12, 8);
+    // decq_mem(&mut cb, Register::R10, 8);
+    // dec_reg(&mut cb, Register::R10);
+    // call_reg(&mut cb, Register::Rax);
+    // test_reg_reg(&mut cb, Register::Rax, Register::R10);
+    // mov_mem_imm32(&mut cb, Register::R12, -16, 42);
+    // add_rsp_imm8(&mut cb, 8);
+    // sub_rsp_imm8(&mut cb, 8);
+    lea_reg_mem(&mut cb, Register::Rax, Register::R12, -16);
     println!("{:x?}", cb.buffer);
 }
 
@@ -638,43 +623,20 @@ pub fn movsd_mem_sib_reg(
     .write_into(buf, opcodes::MOVSD_RM_REG);
 }
 
-/// Encodes `dec <mem u8>` instruction
-pub fn dec_mem_u8_imm8(buf: &mut CodeBuffer, reg: Register, offset: i8) {
-    let mut rex = 0;
-    if reg.needs_rex_prefix() {
-        rex |= rex::B;
-    }
-    if reg.size_bits() == 64 {
-        rex |= rex::W;
-    }
-
-    if rex != 0 {
-        buf.push(rex::BASE | rex);
-    }
-
-    buf.push(opcodes::DEC_RM64);
-    let modrm = modrm::MOD_M8 | (1 << 3) | reg.reg_field();
-    buf.push(modrm);
-    buf.push(offset as u8);
+/// Encodes `decq <mem u8>` instruction
+pub fn decq_mem(buf: &mut CodeBuffer, reg: Register, offset: i32) {
+    let mut encoding = encode_modrm_reg_mem(RegField::Bits(1), Mem::RegDispImm(reg, offset));
+    encoding.rex |= Rex::W;
+    encoding.write_into(buf, &[opcodes::DEC_RM64]);
 }
 
 /// Encodes `dec <reg>` instruction
 pub fn dec_reg(buf: &mut CodeBuffer, reg: Register) {
-    let mut rex = 0;
-    if reg.needs_rex_prefix() {
-        rex |= rex::B;
-    }
+    let mut encoding = encode_modrm_reg_reg(RegField::Bits(1), reg);
     if reg.size_bits() == 64 {
-        rex |= rex::W;
+        encoding.rex |= Rex::W;
     }
-
-    if rex != 0 {
-        buf.push(rex::BASE | rex);
-    }
-
-    buf.push(opcodes::DEC_RM64);
-    let modrm = modrm::MOD_R | (1 << 3) | reg.reg_field();
-    buf.push(modrm);
+    encoding.write_into(buf, &[opcodes::DEC_RM64]);
 }
 
 pub fn mov_reg_imm32(buf: &mut CodeBuffer, reg: Register, imm: u32) {
@@ -686,48 +648,19 @@ pub fn mov_reg_imm32(buf: &mut CodeBuffer, reg: Register, imm: u32) {
 }
 
 pub fn call_reg(buf: &mut CodeBuffer, register: Register) {
-    let mut rex = 0;
-    if register.needs_rex_prefix() {
-        rex |= rex::B;
-    }
-
-    if rex != 0 {
-        buf.push(rex::BASE | rex);
-    }
-
-    buf.push(0xFF);
-
-    let modrm = modrm::MOD_R | (2 << 3) | register.reg_field();
-    buf.push(modrm);
+    encode_modrm_reg_reg(RegField::Bits(2), register).write_into(buf, &[opcodes::CALL_RM64]);
 }
 
 pub fn test_reg_reg(buf: &mut CodeBuffer, reg1: Register, reg2: Register) {
-    let mut rex = 0;
-    if reg1.needs_rex_prefix() {
-        rex |= rex::R;
-    }
-    if reg2.needs_rex_prefix() {
-        rex |= rex::B;
-    }
+    let mut encoding = encode_modrm_reg_reg(RegField::Reg(reg1), reg2);
     if reg1.join_register_size(reg2) == 64 {
-        rex |= rex::W;
+        encoding.rex |= Rex::W;
     }
-
-    if rex != 0 {
-        buf.push(rex::BASE | rex);
-    }
-
-    buf.push(opcodes::TEST_R_R);
-
-    let modrm = modrm::MOD_R | (reg1.reg_field() << 3) | reg2.reg_field();
-    buf.push(modrm);
+    encoding.write_into(buf, &[opcodes::TEST_R_R]);
 }
 
-pub fn mov_mem_imm32(buf: &mut CodeBuffer, base: Register, offset: u8, imm: i32) {
-    buf.push(opcodes::MOV_MEM_IMM32);
-    let modrm = modrm::MOD_M8 | (0 << 3) | base.reg_field();
-    buf.push(modrm);
-    buf.push(offset);
+pub fn mov_mem_imm32(buf: &mut CodeBuffer, base: Register, offset: i32, imm: i32) {
+    encode_modrm_reg_mem(RegField::Bits(0), Mem::RegDispImm(base, offset)).write_into(buf, &[opcodes::MOV_MEM_IMM32]);
     buf.extend_from_slice(&imm.to_le_bytes());
 }
 
@@ -743,19 +676,17 @@ pub fn pop(buf: &mut CodeBuffer, reg: Register) {
 }
 
 pub fn add_rsp_imm8(buf: &mut CodeBuffer, imm: u8) {
-    buf.push(rex::BASE | rex::W);
-    buf.push(opcodes::ADD_RM_IMM8);
-    let modrm = modrm::MOD_R | (0 << 3) | Register::Rsp.reg_field();
-    buf.push(modrm);
+    let mut encoding = encode_modrm_reg_reg(RegField::Bits(0), Register::Rsp);
+    encoding.rex |= Rex::W;
+    encoding.write_into(buf, &[opcodes::ADD_RM_IMM8]);
     buf.push(imm as u8);
 }
 
 #[expect(dead_code)]
 pub fn sub_rsp_imm8(buf: &mut CodeBuffer, imm: u8) {
-    buf.push(rex::BASE | rex::W);
-    buf.push(opcodes::SUB_RM_IMM8);
-    let modrm = modrm::MOD_R | (5 << 3) | Register::Rsp.reg_field();
-    buf.push(modrm);
+    let mut encoding = encode_modrm_reg_reg(RegField::Bits(5), Register::Rsp);
+    encoding.rex |= Rex::W;
+    encoding.write_into(buf, &[opcodes::SUB_RM_IMM8]);
     buf.push(imm as u8);
 }
 
@@ -830,24 +761,12 @@ pub fn jmp_block(buf: &mut CodeBuffer, target: BasicBlockId) {
 }
 
 #[expect(dead_code)]
-pub fn lea_reg_mem(buf: &mut CodeBuffer, dest: Register, base: Register, offset: i8) {
-    let mut rex = 0;
-    if dest.needs_rex_prefix() {
-        rex |= rex::B;
-    }
-    if base.needs_rex_prefix() {
-        rex |= rex::R;
-    }
+pub fn lea_reg_mem(buf: &mut CodeBuffer, dest: Register, base: Register, offset: i32) {
+    let mut encoding = encode_modrm_reg_mem(RegField::Reg(dest), Mem::RegDispImm(base, offset));
     if dest.join_register_size(base) == 64 {
-        rex |= rex::W;
+        encoding.rex |= Rex::W;
     }
-    if rex != 0 {
-        buf.push(rex::BASE | rex);
-    }
-    buf.push(opcodes::LEA);
-    let modrm = modrm::MOD_M8 | (dest.reg_field() << 3) | base.reg_field();
-    buf.push(modrm);
-    buf.push(offset as u8);
+    encoding.write_into(buf, &[opcodes::LEA]);
 }
 
 fn patch_rel32(buf: &mut CodeBuffer, patch_site: CpuIp, target: CpuIp) {
