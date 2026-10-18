@@ -212,6 +212,18 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
                 };
                 state.stack.push(out_ty);
             }
+            GenericStmt::Mul => {
+                state.stack.pop().unwrap();
+                state.stack.pop().unwrap();
+                let out_ty = ValueMetadata { ty: ValueType::Number };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::Lt => {
+                state.stack.pop().unwrap();
+                state.stack.pop().unwrap();
+                let out_ty = ValueMetadata { ty: ValueType::Boolean };
+                state.stack.push(out_ty);
+            }
         },
         Stmt::UncheckedNumberAdd => {
             let rhs = state.stack.pop().unwrap();

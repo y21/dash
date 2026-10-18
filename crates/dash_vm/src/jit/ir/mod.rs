@@ -22,6 +22,8 @@ pub enum GenericStmt {
     Pop,
     PostfixIncLocalNum(BackLocalId),
     Add,
+    Mul,
+    Lt,
 }
 
 index_type! {

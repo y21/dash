@@ -160,9 +160,9 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Re
 
             let mut body = ir::lower_body(bytecode, scope);
             let mut dataflow = dataflow::DataflowEngine::compute(&body, scope);
-            // passes::run(&mut body, &mut dataflow); // For now
+            // passes::run(&mut body, &mut dataflow);
 
-            let mmap_fn = compiler::compile(&body, start, end, &dataflow);
+            let mmap_fn = compiler::compile(&body, start, end, &dataflow, scope);
 
             Ok::<_, CompileError>(mmap_fn)
         })?);

@@ -4,8 +4,8 @@ use dash_middle::compiler::operands::{
     AddOperands, BinaryOperator, ConditionalJumpNoPopOperands, ConditionalJumpPopOperands, InstructionOperands,
     IntrinsicKind, IntrinsicOperands, JmpFalseNoPopOperands, JmpFalsePopOperands, JmpNullishNoPopOperands,
     JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands,
-    JmpUndefinedPopOperands, LdLocalOperands, LoopBackjumpOperands, NumberConstantOperands, NumberConstantWide,
-    NumberInline32, PopOperands, StoreLocalOperands,
+    JmpUndefinedPopOperands, LdLocalOperands, LoopBackjumpOperands, LtOperands, MulOperands, NumberConstantOperands,
+    NumberConstantWide, NumberInline32, PopOperands, StoreLocalOperands,
 };
 use dash_middle::indexvec::IndexVec;
 use rustc_hash::FxHashMap;
@@ -108,6 +108,12 @@ fn lower_from_ip(
             }
             InstructionOperands::Add(AddOperands(BinaryOperator { left: (), right: () })) => {
                 stmts.push(Stmt::Generic(GenericStmt::Add, instr_ip));
+            }
+            InstructionOperands::Lt(LtOperands(BinaryOperator { left: (), right: () })) => {
+                stmts.push(Stmt::Generic(GenericStmt::Lt, instr_ip));
+            }
+            InstructionOperands::Mul(MulOperands(BinaryOperator { left: (), right: () })) => {
+                stmts.push(Stmt::Generic(GenericStmt::Mul, instr_ip));
             }
             InstructionOperands::Jmp(JmpOperands(offset))
             | InstructionOperands::LoopBackJmp(LoopBackjumpOperands { offset, hotness: _ }) => {

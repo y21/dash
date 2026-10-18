@@ -2,41 +2,51 @@ use std::mem::offset_of;
 
 use dash_middle::compiler::instruction::Instruction;
 
+use crate::Vm;
 use crate::frame::Ip;
 use crate::jit::compiler::backend::{
     PrologueData, REG_ARG1, REG_ARG2, REG_ARG3, REG_ARG4, REG_RETURN32, REG_RETURN64, REG_STACK_RELATIVE, Register,
-    call_reg, cmp_reg_al_imm8, codegen_epilogue, codegen_prologue, je_block, je_branch_target, je_synthetic_label,
-    jmp_block, jmp_branch_target, jmp_synthetic_label, jne_block, jne_synthetic_label, mov_mem_imm32, mov_reg_imm32,
-    mov_reg_mem_u8, mov_reg_reg, register_synthetic_block, register_user_block, test_reg_reg, usable_callee_saved_regs,
-    usable_caller_saved_regs,
+    Scale, addsd_reg_mem_sib, call_reg, cmp_reg_al_imm8, codegen_epilogue, codegen_prologue, dec_mem_u8_imm8, je_block,
+    je_branch_target, je_synthetic_label, jmp_block, jmp_branch_target, jmp_synthetic_label, jne_block,
+    jne_synthetic_label, mov_mem_imm32, mov_reg_imm32, mov_reg_mem_u8, mov_reg_reg, movsd_mem_sib_reg,
+    movsd_reg_mem_sib, register_synthetic_block, register_user_block, test_reg_reg, usable_callee_saved_regs,
+    usable_caller_saved_gprs, usable_fprs,
 };
 use crate::jit::compiler::codebuffer::CodeBuffer;
 use crate::jit::compiler::jumpresolver::{CpuIp, SyntheticLabel};
+use crate::jit::compiler::offsets::{VecOffsets, get_vec_offsets};
 use crate::jit::dataflow::{BlockState, DataflowEngine};
 use crate::jit::ir::{BasicBlockId, Body, BranchTarget, ConditionalGotoPopPolicy, GenericStmt, Stmt, Terminator};
 use crate::jit::mmap::MmapFn;
 use crate::jit::{JitOutData, JitVtable};
+use crate::localscope::LocalScope;
 
 mod backend;
 mod codebuffer;
 mod jumpresolver;
+mod offsets;
 
 struct CodegenCx<'a> {
     callee_regs: Vec<Register>,
     caller_regs: Vec<Register>,
+    fprs: Vec<Register>,
     body: &'a Body,
     dataflow: &'a DataflowEngine,
     buf: CodeBuffer,
     prologue: PrologueData,
     /// Start IP of the codegen region *relative to the full function's bytecode*.
     start: Ip,
+    stack_vec_offsets: VecOffsets,
 }
 
 impl<'a> CodegenCx<'a> {
-    fn caller_reg(&mut self) -> Register {
+    fn caller_gpr(&mut self) -> Register {
         self.caller_regs
             .pop()
             .expect("No more caller-saved registers available")
+    }
+    pub fn fpr(&mut self) -> Register {
+        self.fprs.pop().expect("No more floating-point registers available")
     }
     fn callee_reg(&mut self) -> Register {
         self.callee_regs
@@ -48,6 +58,9 @@ impl<'a> CodegenCx<'a> {
     }
     fn add_callee_reg(&mut self, reg: Register) {
         self.callee_regs.push(reg);
+    }
+    fn add_fpr(&mut self, reg: Register) {
+        self.fprs.push(reg);
     }
 
     /// Emits a call to the handler stub that forwards to the dispatch handler. Used as a fallback for unspecialized instructions.
@@ -74,6 +87,11 @@ impl<'a> CodegenCx<'a> {
         }
 
         for stmt in self.body.blocks[block].stmts.iter_indices() {
+            println!(
+                "Emitting {:?} at {:x?}",
+                self.body.blocks[block].stmts[stmt],
+                self.buf.offset()
+            );
             match self.body.blocks[block].stmts[stmt] {
                 Stmt::Generic(ref generic_stmt, ip) => match *generic_stmt {
                     GenericStmt::LdLocal(_) => self.codegen_handler_stub(Instruction::LdLocal, ip),
@@ -83,15 +101,92 @@ impl<'a> CodegenCx<'a> {
                     }
                     GenericStmt::Number(_) => self.codegen_handler_stub(Instruction::Number, ip),
                     GenericStmt::Pop => self.codegen_handler_stub(Instruction::Pop, ip),
+                    GenericStmt::Lt => self.codegen_handler_stub(Instruction::Lt, ip),
                     GenericStmt::Add => self.codegen_handler_stub(Instruction::Add, ip),
+                    GenericStmt::Mul => self.codegen_handler_stub(Instruction::Mul, ip),
                 },
-                Stmt::UncheckedNumberAdd => todo!(
-                    "Implement the actual first specialized instruction operating directly on the stack top doing unchecked fadds"
-                ),
+                Stmt::UncheckedNumberAdd => {
+                    /*
+                    vm->stack[vm->stack.len - 2] = vm->stack[vm->stack.len - 2] + vm->stack[vm->stack.len - 1];
+                    vm->stack.len -= 1;
+
+                    movsxd  rax, dword ptr [rdi + 8]                ;; mov len into rax, could just be mov eax, dword ptr [rdi + 8] - dont need sign extension
+                    mov     rcx, qword ptr [rdi]                    ;; mov stack base into rcx
+
+                    movsd   xmm0, qword ptr [rcx + 8*rax - 16]      ;; store pointer to the 2nd-to-last element (equiv to stack[stack.len() - 2])
+                    addsd   xmm0, qword ptr [rcx + 8*rax - 8]       ;; add the top element (equiv to stack[stack.len() - 1]) to the 2nd-to-last element
+                    movsd   qword ptr [rcx + 8*rax - 16], xmm0      ;; mov the sum (xmm0) back into the 2nd-to-last element (equiv to stack[stack.len() - 2])
+                    dec     eax                                     ;; decrement the local stack length copy
+                    mov     dword ptr [rdi + 8], eax                ;; write the new length back
+                    ret
+
+                                 */
+                    // stack offset on the VM: offset_of!(Vm, stack)
+                    let len_reg = self.caller_gpr();
+                    let stack_ptr_reg = self.caller_gpr();
+                    let fpr = self.fpr();
+
+                    let stack_ptr_offset = offset_of!(Vm, stack) + self.stack_vec_offsets.ptr;
+                    let stack_len_offset = offset_of!(Vm, stack) + self.stack_vec_offsets.len;
+
+                    // Store stack base
+                    mov_reg_mem_u8(
+                        &mut self.buf,
+                        stack_ptr_reg,
+                        self.prologue.vm_csreg,
+                        stack_ptr_offset.try_into().unwrap(),
+                    );
+
+                    // Store len field
+                    mov_reg_mem_u8(
+                        &mut self.buf,
+                        len_reg,
+                        stack_ptr_reg,
+                        stack_len_offset.try_into().unwrap(),
+                    );
+
+                    // Load second-to-last stack value as an f64
+                    movsd_reg_mem_sib(
+                        &mut self.buf,
+                        fpr,
+                        stack_ptr_reg,
+                        len_reg,
+                        Scale::target_pointer_with(),
+                        (size_of::<usize>() * 2).try_into().unwrap(),
+                    );
+
+                    // Add the top stack value (as an f64) to the second-to-last value
+                    addsd_reg_mem_sib(
+                        &mut self.buf,
+                        fpr,
+                        stack_ptr_reg,
+                        len_reg,
+                        Scale::target_pointer_with(),
+                        (size_of::<usize>() * 1).try_into().unwrap(),
+                    );
+
+                    // Write the result f64 back to the second-to-last stack value
+                    movsd_mem_sib_reg(
+                        &mut self.buf,
+                        fpr,
+                        stack_ptr_reg,
+                        len_reg,
+                        Scale::target_pointer_with(),
+                        (size_of::<usize>() * 2).try_into().unwrap(),
+                    );
+
+                    // Decrement length
+                    dec_mem_u8_imm8(&mut self.buf, stack_ptr_reg, stack_len_offset.try_into().unwrap());
+
+                    self.add_fpr(fpr);
+                    self.add_caller_reg(stack_ptr_reg);
+                    self.add_caller_reg(len_reg);
+                }
             }
         }
 
         let terminator = self.body.blocks[block].terminator();
+        println!("Emitting {:?} at {:x?}", terminator, self.buf.offset());
         match *terminator {
             Terminator::Goto(target) => match target {
                 BranchTarget::Block(target) => {
@@ -106,7 +201,8 @@ impl<'a> CodegenCx<'a> {
                 pop,
                 condition,
             } => {
-                let check_last_value_fn = self.caller_reg();
+                let check_last_value_fn = self.caller_gpr();
+                dbg!(check_last_value_fn, self.prologue.vtable_csreg);
 
                 mov_reg_mem_u8(
                     &mut self.buf,
@@ -142,21 +238,24 @@ impl<'a> CodegenCx<'a> {
     }
 }
 
-pub fn compile(body: &Body, start_ip: Ip, end_ip: Ip, dataflow: &DataflowEngine) -> MmapFn {
+pub fn compile(body: &Body, start_ip: Ip, end_ip: Ip, dataflow: &DataflowEngine, scope: &LocalScope<'_>) -> MmapFn {
     let mut buf = CodeBuffer::new(body);
     let mut callee_regs = usable_callee_saved_regs();
-    let caller_regs = usable_caller_saved_regs();
+    let caller_regs = usable_caller_saved_gprs();
+    let fprs = usable_fprs();
 
     let prologue = codegen_prologue(&mut buf, &mut callee_regs);
 
     let mut cx = CodegenCx {
         callee_regs,
         caller_regs,
+        fprs,
         body,
         dataflow,
         buf,
         prologue,
         start: start_ip,
+        stack_vec_offsets: get_vec_offsets(&scope.stack),
     };
 
     cx.codegen_body();

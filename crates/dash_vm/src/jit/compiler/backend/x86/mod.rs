@@ -1,6 +1,7 @@
 mod modrm {
     pub const MOD_R: u8 = 0b11_000_000;
     pub const MOD_M8: u8 = 0b01_000_000;
+    pub const MOD_M8_SIB: u8 = 0b01_000_100;
 }
 
 #[expect(dead_code)]
@@ -29,15 +30,23 @@ mod opcodes {
     pub const SUB_RM_IMM8: u8 = 0x83;
     pub const LEA: u8 = 0x8D;
     pub const MOV_MEM_IMM32: u8 = 0xC7;
+    pub const MOVSD_REG_RM: &[u8] = &[0x0F, 0x10];
+    pub const ADDSD_REG_RM: &[u8] = &[0x0F, 0x58];
+    pub const MOVSD_RM_REG: &[u8] = &[0x0F, 0x11];
+    pub const DEC_RM64: u8 = 0xff;
 }
 
 use std::mem::offset_of;
+use std::ops::BitOrAssign;
+
+use arrayvec::ArrayVec;
+use dash_middle::indexvec::IndexVec;
 
 use crate::frame::Ip;
 use crate::jit::JitVtable;
 use crate::jit::compiler::codebuffer::CodeBuffer;
 use crate::jit::compiler::jumpresolver::{CpuIp, PatchData, SyntheticLabel};
-use crate::jit::ir::BasicBlockId;
+use crate::jit::ir::{BasicBlockId, Body};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[expect(dead_code)]
@@ -60,6 +69,23 @@ pub enum Register {
     Rdx,
     Rcx,
     Rbx,
+
+    Xmm0,
+    Xmm1,
+    Xmm2,
+    Xmm3,
+    Xmm4,
+    Xmm5,
+    Xmm6,
+    Xmm7,
+    Xmm8,
+    Xmm9,
+    Xmm10,
+    Xmm11,
+    Xmm12,
+    Xmm13,
+    Xmm14,
+    Xmm15,
 }
 
 impl Register {
@@ -80,7 +106,23 @@ impl Register {
             | Register::Rbx
             | Register::R9
             | Register::R10
-            | Register::R11 => 64,
+            | Register::R11
+            | Register::Xmm0
+            | Register::Xmm1
+            | Register::Xmm2
+            | Register::Xmm3
+            | Register::Xmm4
+            | Register::Xmm5
+            | Register::Xmm6
+            | Register::Xmm7
+            | Register::Xmm8
+            | Register::Xmm9
+            | Register::Xmm10
+            | Register::Xmm11
+            | Register::Xmm12
+            | Register::Xmm13
+            | Register::Xmm14
+            | Register::Xmm15 => 64,
             Register::Eax => 32,
             Register::Al => 8,
         }
@@ -100,14 +142,28 @@ impl Register {
 
     pub fn reg_field(self) -> u8 {
         match self {
-            Register::Rax | Register::Eax | Register::Al | Register::R8 => 0,
-            Register::Rcx | Register::R9 => 1,
-            Register::Rdx | Register::R10 => 2,
-            Register::Rbx | Register::R11 => 3,
-            Register::Rsp | Register::R12 => 4,
-            Register::Rbp | Register::R13 => 5,
-            Register::Rsi | Register::R14 => 6,
-            Register::Rdi | Register::R15 => 7,
+            Register::Rax | Register::Eax | Register::Al | Register::R8 | Register::Xmm0 | Register::Xmm8 => 0,
+            Register::Rcx | Register::R9 | Register::Xmm1 | Register::Xmm9 => 1,
+            Register::Rdx | Register::R10 | Register::Xmm2 | Register::Xmm10 => 2,
+            Register::Rbx | Register::R11 | Register::Xmm3 | Register::Xmm11 => 3,
+            Register::Rsp | Register::R12 | Register::Xmm4 | Register::Xmm12 => 4,
+            Register::Rbp | Register::R13 | Register::Xmm5 | Register::Xmm13 => 5,
+            Register::Rsi | Register::R14 | Register::Xmm6 | Register::Xmm14 => 6,
+            Register::Rdi | Register::R15 | Register::Xmm7 | Register::Xmm15 => 7,
+        }
+    }
+
+    const RM_FIELD_NEEDS_SIB: u8 = 0b100;
+    pub fn rm_field(self) -> u8 {
+        match self {
+            Register::Al | Register::Eax | Register::Rax | Register::Xmm0 | Register::R8 | Register::Xmm8 => 0b000,
+            Register::Rcx | Register::Xmm1 | Register::R9 | Register::Xmm9 => 0b001,
+            Register::Rdx | Register::Xmm2 | Register::R10 | Register::Xmm10 => 0b010,
+            Register::Rbx | Register::Xmm3 | Register::R11 | Register::Xmm11 => 0b011,
+            Register::Rsp | Register::Xmm4 | Register::R12 | Register::Xmm12 => 0b100,
+            Register::Rbp | Register::Xmm5 | Register::R13 | Register::Xmm13 => 0b101,
+            Register::Rsi | Register::Xmm6 | Register::R14 | Register::Xmm14 => 0b110,
+            Register::Rdi | Register::Xmm7 | Register::R15 | Register::Xmm15 => 0b111,
         }
     }
 
@@ -120,7 +176,15 @@ impl Register {
             | Register::R12
             | Register::R13
             | Register::R14
-            | Register::R15 => true,
+            | Register::R15
+            | Register::Xmm8
+            | Register::Xmm9
+            | Register::Xmm10
+            | Register::Xmm11
+            | Register::Xmm12
+            | Register::Xmm13
+            | Register::Xmm14
+            | Register::Xmm15 => true,
             Register::Rax
             | Register::Eax
             | Register::Rbp
@@ -130,31 +194,76 @@ impl Register {
             | Register::Rdx
             | Register::Al
             | Register::Rcx
-            | Register::Rbx => false,
+            | Register::Rbx
+            | Register::Xmm0
+            | Register::Xmm1
+            | Register::Xmm2
+            | Register::Xmm3
+            | Register::Xmm4
+            | Register::Xmm5
+            | Register::Xmm6
+            | Register::Xmm7 => false,
         }
     }
 }
 
 pub fn usable_callee_saved_regs() -> Vec<Register> {
+    // Intentionally in reverse order such that pop() will yield regs that don't need a REX prefix first
     vec![
-        Register::Rbx,
-        Register::R12,
-        Register::R13,
-        Register::R14,
+        // Register::Rbx,
+        // Register::R12,
+        // Register::R13,
+        // Register::R14,
+        // Register::R15,
         Register::R15,
+        Register::R14,
+        Register::R13,
+        Register::R12,
+        Register::Rbx,
     ]
 }
-pub fn usable_caller_saved_regs() -> Vec<Register> {
+pub fn usable_caller_saved_gprs() -> Vec<Register> {
+    // Intentionally in reverse order such that pop() will yield regs that don't need a REX prefix first
     vec![
-        Register::Rax,
-        Register::Rcx,
-        Register::Rdx,
-        Register::Rsi,
-        Register::Rdi,
-        Register::R8,
-        Register::R9,
-        Register::R10,
+        // Register::Rax,
+        // Register::Rcx,
+        // Register::Rdx,
+        // Register::Rsi,
+        // Register::Rdi,
+        // Register::R8,
+        // Register::R9,
+        // Register::R10,
+        // Register::R11,
         Register::R11,
+        Register::R10,
+        Register::R9,
+        Register::R8,
+        Register::Rdi,
+        Register::Rsi,
+        Register::Rdx,
+        Register::Rcx,
+        Register::Rax,
+    ]
+}
+pub fn usable_fprs() -> Vec<Register> {
+    // Intentionally in reverse order such that pop() will yield regs that don't need a REX prefix first
+    vec![
+        Register::Xmm15,
+        Register::Xmm14,
+        Register::Xmm13,
+        Register::Xmm12,
+        Register::Xmm11,
+        Register::Xmm10,
+        Register::Xmm9,
+        Register::Xmm8,
+        Register::Xmm7,
+        Register::Xmm6,
+        Register::Xmm5,
+        Register::Xmm4,
+        Register::Xmm3,
+        Register::Xmm2,
+        Register::Xmm1,
+        Register::Xmm0,
     ]
 }
 
@@ -244,6 +353,7 @@ pub fn push(buf: &mut CodeBuffer, reg: Register) {
     buf.push(opcodes::PUSH_REG + reg.reg_field());
 }
 
+/// Encodes `mov <dest reg>, [<base reg> + <offset imm8>]`
 pub fn mov_reg_mem_u8(buf: &mut CodeBuffer, dest: Register, base: Register, offset: i8) {
     let mut rex = 0;
     if base.needs_rex_prefix() {
@@ -262,10 +372,309 @@ pub fn mov_reg_mem_u8(buf: &mut CodeBuffer, dest: Register, base: Register, offs
 
     buf.push(opcodes::MOV_R_RM);
 
-    let modrm = modrm::MOD_M8 | (dest.reg_field() << 3) | base.reg_field();
+    let modrm = modrm::MOD_M8 | (dest.reg_field() << 3) | base.reg_field(); // base should be using dest.rm_field()!!
     buf.push(modrm);
 
     buf.push(offset as u8);
+}
+
+pub enum Scale {
+    X1 = 0b00,
+    X2 = 0b01,
+    X4 = 0b10,
+    X8 = 0b11,
+}
+
+impl Scale {
+    pub fn target_pointer_with() -> Self {
+        if cfg!(target_pointer_width = "64") {
+            Scale::X8
+        } else if cfg!(target_pointer_width = "32") {
+            Scale::X4
+        } else {
+            panic!("Unsupported target pointer width");
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Rex(u8);
+impl Rex {
+    pub const BASE: Self = Self(0x40);
+    pub const R: Self = Self(0b0100);
+    pub const X: Self = Self(0b0010);
+    pub const B: Self = Self(0b0001);
+    pub const W: Self = Self(0b1000);
+    pub const EMPTY: Self = Self(0b0000);
+}
+impl BitOrAssign for Rex {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+struct ModrmEncoding {
+    rex: Rex,
+    modrm: u8,
+    sib: Option<u8>,
+    displacement: ArrayVec<u8, 4>,
+}
+
+impl ModrmEncoding {
+    fn write_into(self, buf: &mut CodeBuffer, opcode: &[u8]) {
+        buf.push(self.rex.0);
+        buf.extend_from_slice(opcode);
+        buf.push(self.modrm);
+        if let Some(sib) = self.sib {
+            buf.push(sib);
+        }
+        buf.extend_from_slice(&self.displacement);
+    }
+}
+
+enum RegField {
+    Reg(Register),
+    Bits(u8),
+}
+
+fn build_sib(scale: Scale, index: Option<Register>, base: Register) -> u8 {
+    (scale as u8) << 6 | (index.map_or(0b100, |r| r.reg_field()) << 3) | base.reg_field()
+}
+
+fn encode_modrm_reg_reg(reg: RegField, rm: Register) -> ModrmEncoding {
+    let mut rex = Rex::BASE;
+
+    let reg_bits = match reg {
+        RegField::Reg(register) => {
+            rex |= Rex::R;
+            register.reg_field()
+        }
+        RegField::Bits(bits) => bits,
+    };
+    assert!(reg_bits <= 0b111);
+    let rm_bits = rm.rm_field();
+    if rm.needs_rex_prefix() {
+        rex |= Rex::B;
+    }
+    let modrm = modrm::MOD_R | (reg_bits << 3) | rm_bits;
+
+    ModrmEncoding {
+        rex,
+        modrm,
+        sib: None,
+        displacement: ArrayVec::new(),
+    }
+}
+
+enum Mem {
+    // [reg + imm]
+    RegDispImm(Register, i32),
+    RegScaledIndexImm {
+        base: Register,
+        index: Register,
+        scale: Scale,
+        offset: i32,
+    },
+}
+
+fn encode_modrm_reg_mem(reg: RegField, rm: Mem) -> ModrmEncoding {
+    let mut rex = Rex::BASE;
+    let mut modrm = 0;
+
+    match reg {
+        RegField::Reg(register) => {
+            if register.needs_rex_prefix() {
+                rex |= Rex::R;
+            }
+            modrm |= register.reg_field() << 3;
+        }
+        RegField::Bits(bits) => modrm |= bits << 3,
+    }
+
+    let (sib, displacement) = match rm {
+        Mem::RegDispImm(reg, imm) => {
+            if reg.needs_rex_prefix() {
+                rex |= Rex::B;
+            }
+
+            if let Ok(imm) = i8::try_from(imm) {
+                let rm = reg.rm_field();
+                modrm |= rm;
+
+                if rm == Register::RM_FIELD_NEEDS_SIB {
+                    (
+                        Some(build_sib(Scale::X1, None, reg)),
+                        ArrayVec::<u8, 4>::try_from([imm as u8].as_slice()).unwrap(),
+                    )
+                } else {
+                    (None, ArrayVec::new())
+                }
+            } else {
+                unimplemented!()
+            }
+        }
+        Mem::RegScaledIndexImm {
+            base,
+            index,
+            scale,
+            offset,
+        } => {
+            if base.needs_rex_prefix() {
+                rex |= Rex::B;
+            }
+            if index.needs_rex_prefix() {
+                rex |= Rex::X;
+            }
+
+            if let Ok(offset) = i8::try_from(offset) {
+                let sib = build_sib(scale, Some(index), base);
+                modrm |= modrm::MOD_M8_SIB | Register::RM_FIELD_NEEDS_SIB;
+                let displacement = ArrayVec::<u8, 4>::try_from([offset as u8].as_slice()).unwrap();
+
+                (Some(sib), displacement)
+            } else {
+                unimplemented!()
+            }
+        }
+    };
+
+    ModrmEncoding {
+        rex,
+        modrm,
+        sib,
+        displacement,
+    }
+}
+
+/// Encodes `movsd <dest reg>, [<base reg> + <index reg> * <scale> + <offset imm8>]` (SIB addressing)
+pub fn movsd_reg_mem_sib(
+    buf: &mut CodeBuffer,
+    dest: Register,
+    base: Register,
+    index: Register,
+    scale: Scale,
+    offset: i32,
+) {
+    buf.push(0xf2);
+
+    let encoding = encode_modrm_reg_mem(
+        RegField::Reg(dest),
+        Mem::RegScaledIndexImm {
+            base,
+            index,
+            scale,
+            offset,
+        },
+    );
+
+    encoding.write_into(buf, opcodes::MOVSD_REG_RM);
+}
+#[test]
+fn test_movsd() {
+    let mut cb = CodeBuffer::new(&Body {
+        blocks: Default::default(),
+        root: BasicBlockId(0),
+    });
+    // movsd_reg_mem_sib(&mut cb, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16);
+    // addsd_reg_mem_sib(&mut cb, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16);
+    // movsd_mem_sib_reg(&mut cb, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16);
+    /*
+      4a:   49 8b 44 08 4c          mov    0x4c(%r8,%rcx,1),%rax
+
+               mov_reg_mem_u8(
+                   &mut self.buf,
+                   check_last_value_fn,
+                   self.prologue.vtable_csreg,
+                   offset_of!(JitVtable, check_last_value).try_into().unwrap(),
+               );
+    */
+    // mov_reg_mem_u8(&mut cb, Register::Rax, Register::R12, 8);
+    println!("{:x?}", cb.buffer);
+}
+
+/// Encodes `addsd <dest reg>, [<base reg> + <index reg> * <scale> + <offset imm8>]` (SIB addressing)
+pub fn addsd_reg_mem_sib(
+    buf: &mut CodeBuffer,
+    dest: Register,
+    base: Register,
+    index: Register,
+    scale: Scale,
+    offset: i32,
+) {
+    buf.push(0xf2);
+
+    encode_modrm_reg_mem(
+        RegField::Reg(dest),
+        Mem::RegScaledIndexImm {
+            base,
+            index,
+            scale,
+            offset,
+        },
+    )
+    .write_into(buf, opcodes::ADDSD_REG_RM);
+}
+
+/// Encodes `movsd [<base reg> + <index reg> * <scale> + <offset imm8>], <src reg>` (SIB addressing)
+pub fn movsd_mem_sib_reg(
+    buf: &mut CodeBuffer,
+    source: Register,
+    base: Register,
+    index: Register,
+    scale: Scale,
+    offset: i32,
+) {
+    buf.push(0xf2);
+
+    encode_modrm_reg_mem(
+        RegField::Reg(source),
+        Mem::RegScaledIndexImm {
+            base,
+            index,
+            scale,
+            offset,
+        },
+    )
+    .write_into(buf, opcodes::MOVSD_RM_REG);
+}
+
+/// Encodes `dec <mem u8>` instruction
+pub fn dec_mem_u8_imm8(buf: &mut CodeBuffer, reg: Register, offset: i8) {
+    let mut rex = 0;
+    if reg.needs_rex_prefix() {
+        rex |= rex::B;
+    }
+    if reg.size_bits() == 64 {
+        rex |= rex::W;
+    }
+
+    if rex != 0 {
+        buf.push(rex::BASE | rex);
+    }
+
+    buf.push(opcodes::DEC_RM64);
+    let modrm = modrm::MOD_M8 | (1 << 3) | reg.reg_field();
+    buf.push(modrm);
+    buf.push(offset as u8);
+}
+
+/// Encodes `dec <reg>` instruction
+pub fn dec_reg(buf: &mut CodeBuffer, reg: Register) {
+    let mut rex = 0;
+    if reg.needs_rex_prefix() {
+        rex |= rex::B;
+    }
+    if reg.size_bits() == 64 {
+        rex |= rex::W;
+    }
+
+    if rex != 0 {
+        buf.push(rex::BASE | rex);
+    }
+
+    buf.push(opcodes::DEC_RM64);
+    let modrm = modrm::MOD_R | (1 << 3) | reg.reg_field();
+    buf.push(modrm);
 }
 
 pub fn mov_reg_imm32(buf: &mut CodeBuffer, reg: Register, imm: u32) {
@@ -475,3 +884,5 @@ pub fn register_synthetic_block(buf: &mut CodeBuffer, label: SyntheticLabel) -> 
         PatchData::Resolved { ip: _ } => false,
     }
 }
+
+// TODO: generate tests for all of these
