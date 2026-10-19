@@ -1,3 +1,4 @@
+use dash_middle::compiler::FunctionCallKind;
 use dash_middle::compiler::instruction::AssignKind;
 use dash_middle::compiler::scope::BackLocalId;
 use dash_middle::indexvec::IndexVec;
@@ -122,6 +123,7 @@ impl DataflowEngine {
                     } else {
                         // No state for this successor yet, so it becomes the current state.
                         self.entry_states[block] = Some(state.clone());
+                        queue.push(block);
                     }
                 }
             });
@@ -222,6 +224,212 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
                 state.stack.pop().unwrap();
                 state.stack.pop().unwrap();
                 let out_ty = ValueMetadata { ty: ValueType::Boolean };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::Sub
+            | GenericStmt::Div
+            | GenericStmt::Rem
+            | GenericStmt::Pow
+            | GenericStmt::BitOr
+            | GenericStmt::BitXor
+            | GenericStmt::BitAnd
+            | GenericStmt::BitShl
+            | GenericStmt::BitShr
+            | GenericStmt::BitUshr
+            | GenericStmt::AddNumLR
+            | GenericStmt::SubNumLR
+            | GenericStmt::MulNumLR
+            | GenericStmt::DivNumLR
+            | GenericStmt::RemNumLR
+            | GenericStmt::PowNumLR
+            | GenericStmt::BitOrNumLR
+            | GenericStmt::BitXorNumLR
+            | GenericStmt::BitAndNumLR
+            | GenericStmt::BitShlNumLR
+            | GenericStmt::BitShrNumLR
+            | GenericStmt::BitUshrNumLR => {
+                state.stack.pop().unwrap();
+                state.stack.pop().unwrap();
+                let out_ty = ValueMetadata { ty: ValueType::Number };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::Gt
+            | GenericStmt::Ge
+            | GenericStmt::Le
+            | GenericStmt::Eq
+            | GenericStmt::Ne
+            | GenericStmt::StrictEq
+            | GenericStmt::StrictNe
+            | GenericStmt::ObjIn
+            | GenericStmt::InstanceOf
+            | GenericStmt::DeletePropertyDynamic
+            | GenericStmt::GtNumLR
+            | GenericStmt::GeNumLR
+            | GenericStmt::LtNumLR
+            | GenericStmt::LeNumLR
+            | GenericStmt::EqNumLR
+            | GenericStmt::NeNumLR => {
+                state.stack.pop().unwrap();
+                state.stack.pop().unwrap();
+                let out_ty = ValueMetadata { ty: ValueType::Boolean };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::Pos | GenericStmt::Neg | GenericStmt::BitNot => {
+                state.stack.pop().unwrap();
+                let out_ty = ValueMetadata { ty: ValueType::Number };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::Not => {
+                state.stack.pop().unwrap();
+                let out_ty = ValueMetadata { ty: ValueType::Boolean };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::DeletePropertyStatic
+            | GenericStmt::GtNumLConstR(_)
+            | GenericStmt::GtNumLConstR32(_)
+            | GenericStmt::GeNumLConstR(_)
+            | GenericStmt::GeNumLConstR32(_)
+            | GenericStmt::LtNumLConstR(_)
+            | GenericStmt::LeNumLConstR(_)
+            | GenericStmt::LeNumLConstR32(_) => {
+                state.stack.pop().unwrap();
+                let out_ty = ValueMetadata { ty: ValueType::Boolean };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::TypeOf | GenericStmt::CallSymbolIterator | GenericStmt::CallForInIterator => {
+                state.stack.pop().unwrap();
+                let out_ty = ValueMetadata { ty: ValueType::Any };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::BindThis | GenericStmt::ExportDefault | GenericStmt::ImportDyn | GenericStmt::Throw => {
+                state.stack.pop().unwrap();
+            }
+            GenericStmt::Nan
+            | GenericStmt::Infinity
+            | GenericStmt::PostfixDecLocalNum(_)
+            | GenericStmt::PrefixIncLocalNum(_)
+            | GenericStmt::PrefixDecLocalNum(_) => {
+                let out_ty = ValueMetadata { ty: ValueType::Number };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::Boolean => {
+                let out_ty = ValueMetadata { ty: ValueType::Boolean };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::Null
+            | GenericStmt::Undefined
+            | GenericStmt::Undef
+            | GenericStmt::Global
+            | GenericStmt::This
+            | GenericStmt::NewTarget
+            | GenericStmt::String
+            | GenericStmt::Regex
+            | GenericStmt::Function
+            | GenericStmt::LdGlobal
+            | GenericStmt::TypeOfGlobalIdent
+            | GenericStmt::LdLocalExt => {
+                let out_ty = ValueMetadata { ty: ValueType::Any };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::Nop | GenericStmt::Debugger | GenericStmt::ExportNamed => {}
+            GenericStmt::ImportStatic { local } => {
+                state.locals[local] = ValueMetadata { ty: ValueType::Any };
+            }
+            GenericStmt::Call { argc, has_this, kind } => {
+                let mut stack_values = argc;
+
+                if let FunctionCallKind::Super = kind {
+                    // super() call has neither a `this` value on the stack nor a callee.
+                } else if has_this {
+                    // Callee + `this` on the stack
+                    stack_values += 2;
+                } else {
+                    // Otherwise, normal function call with just the callee on the stack
+                    stack_values += 1;
+                }
+
+                for _ in 0..stack_values {
+                    state.stack.pop().unwrap();
+                }
+                let out_ty = ValueMetadata { ty: ValueType::Any };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::StoreGlobal { kind } | GenericStmt::StoreLocalExt { kind } => {
+                let out_ty = match kind {
+                    AssignKind::Assignment => state.stack.pop().unwrap(),
+                    AssignKind::AddAssignment
+                    | AssignKind::SubAssignment
+                    | AssignKind::MulAssignment
+                    | AssignKind::DivAssignment
+                    | AssignKind::RemAssignment
+                    | AssignKind::PowAssignment
+                    | AssignKind::ShlAssignment
+                    | AssignKind::ShrAssignment
+                    | AssignKind::UshrAssignment
+                    | AssignKind::BitAndAssignment
+                    | AssignKind::BitOrAssignment
+                    | AssignKind::BitXorAssignment => {
+                        state.stack.pop().unwrap();
+                        ValueMetadata { ty: ValueType::Any }
+                    }
+                    AssignKind::PrefixIncrement
+                    | AssignKind::PostfixIncrement
+                    | AssignKind::PrefixDecrement
+                    | AssignKind::PostfixDecrement => ValueMetadata { ty: ValueType::Any },
+                };
+                state.stack.push(out_ty);
+            }
+            GenericStmt::StaticPropAssign { kind } => {
+                let out_ty = match kind {
+                    AssignKind::Assignment => state.stack.pop().unwrap(),
+                    AssignKind::AddAssignment
+                    | AssignKind::SubAssignment
+                    | AssignKind::MulAssignment
+                    | AssignKind::DivAssignment
+                    | AssignKind::RemAssignment
+                    | AssignKind::PowAssignment
+                    | AssignKind::ShlAssignment
+                    | AssignKind::ShrAssignment
+                    | AssignKind::UshrAssignment
+                    | AssignKind::BitAndAssignment
+                    | AssignKind::BitOrAssignment
+                    | AssignKind::BitXorAssignment => {
+                        state.stack.pop().unwrap(); // value
+                        ValueMetadata { ty: ValueType::Any }
+                    }
+                    AssignKind::PrefixIncrement
+                    | AssignKind::PostfixIncrement
+                    | AssignKind::PrefixDecrement
+                    | AssignKind::PostfixDecrement => ValueMetadata { ty: ValueType::Any },
+                };
+                state.stack.pop().unwrap(); // target
+                state.stack.push(out_ty);
+            }
+            GenericStmt::DynamicPropAssign { kind } => {
+                let out_ty = match kind {
+                    AssignKind::Assignment => state.stack.pop().unwrap(),
+                    AssignKind::AddAssignment
+                    | AssignKind::SubAssignment
+                    | AssignKind::MulAssignment
+                    | AssignKind::DivAssignment
+                    | AssignKind::RemAssignment
+                    | AssignKind::PowAssignment
+                    | AssignKind::ShlAssignment
+                    | AssignKind::ShrAssignment
+                    | AssignKind::UshrAssignment
+                    | AssignKind::BitAndAssignment
+                    | AssignKind::BitOrAssignment
+                    | AssignKind::BitXorAssignment => {
+                        state.stack.pop().unwrap(); // value
+                        ValueMetadata { ty: ValueType::Any }
+                    }
+                    AssignKind::PrefixIncrement
+                    | AssignKind::PostfixIncrement
+                    | AssignKind::PrefixDecrement
+                    | AssignKind::PostfixDecrement => ValueMetadata { ty: ValueType::Any },
+                };
+                state.stack.pop().unwrap(); // key
+                state.stack.pop().unwrap(); // target
                 state.stack.push(out_ty);
             }
         },

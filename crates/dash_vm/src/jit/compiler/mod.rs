@@ -96,14 +96,105 @@ impl<'a> CodegenCx<'a> {
                 Stmt::Generic(ref generic_stmt, ip) => match *generic_stmt {
                     GenericStmt::LdLocal(_) => self.codegen_handler_stub(Instruction::LdLocal, ip),
                     GenericStmt::StoreLocal { .. } => self.codegen_handler_stub(Instruction::StoreLocal, ip),
-                    GenericStmt::LtNumLConstR32(_) | GenericStmt::PostfixIncLocalNum(_) => {
-                        self.codegen_handler_stub(Instruction::IntrinsicOp, ip)
-                    }
+                    GenericStmt::LtNumLConstR32(_)
+                    | GenericStmt::PostfixIncLocalNum(_)
+                    | GenericStmt::PostfixDecLocalNum(_)
+                    | GenericStmt::PrefixIncLocalNum(_)
+                    | GenericStmt::PrefixDecLocalNum(_)
+                    | GenericStmt::AddNumLR
+                    | GenericStmt::SubNumLR
+                    | GenericStmt::MulNumLR
+                    | GenericStmt::DivNumLR
+                    | GenericStmt::RemNumLR
+                    | GenericStmt::PowNumLR
+                    | GenericStmt::GtNumLR
+                    | GenericStmt::GeNumLR
+                    | GenericStmt::LtNumLR
+                    | GenericStmt::LeNumLR
+                    | GenericStmt::EqNumLR
+                    | GenericStmt::NeNumLR
+                    | GenericStmt::BitOrNumLR
+                    | GenericStmt::BitXorNumLR
+                    | GenericStmt::BitAndNumLR
+                    | GenericStmt::BitShlNumLR
+                    | GenericStmt::BitShrNumLR
+                    | GenericStmt::BitUshrNumLR
+                    | GenericStmt::GtNumLConstR(_)
+                    | GenericStmt::GtNumLConstR32(_)
+                    | GenericStmt::GeNumLConstR(_)
+                    | GenericStmt::GeNumLConstR32(_)
+                    | GenericStmt::LtNumLConstR(_)
+                    | GenericStmt::LeNumLConstR(_)
+                    | GenericStmt::LeNumLConstR32(_) => self.codegen_handler_stub(Instruction::IntrinsicOp, ip),
                     GenericStmt::Number(_) => self.codegen_handler_stub(Instruction::Number, ip),
                     GenericStmt::Pop => self.codegen_handler_stub(Instruction::Pop, ip),
                     GenericStmt::Lt => self.codegen_handler_stub(Instruction::Lt, ip),
                     GenericStmt::Add => self.codegen_handler_stub(Instruction::Add, ip),
                     GenericStmt::Mul => self.codegen_handler_stub(Instruction::Mul, ip),
+                    GenericStmt::Sub => self.codegen_handler_stub(Instruction::Sub, ip),
+                    GenericStmt::Div => self.codegen_handler_stub(Instruction::Div, ip),
+                    GenericStmt::Rem => self.codegen_handler_stub(Instruction::Rem, ip),
+                    GenericStmt::Pow => self.codegen_handler_stub(Instruction::Pow, ip),
+                    GenericStmt::Gt => self.codegen_handler_stub(Instruction::Gt, ip),
+                    GenericStmt::Ge => self.codegen_handler_stub(Instruction::Ge, ip),
+                    GenericStmt::Le => self.codegen_handler_stub(Instruction::Le, ip),
+                    GenericStmt::Eq => self.codegen_handler_stub(Instruction::Eq, ip),
+                    GenericStmt::Ne => self.codegen_handler_stub(Instruction::Ne, ip),
+                    GenericStmt::StrictEq => self.codegen_handler_stub(Instruction::StrictEq, ip),
+                    GenericStmt::StrictNe => self.codegen_handler_stub(Instruction::StrictNe, ip),
+                    GenericStmt::BitOr => self.codegen_handler_stub(Instruction::BitOr, ip),
+                    GenericStmt::BitXor => self.codegen_handler_stub(Instruction::BitXor, ip),
+                    GenericStmt::BitAnd => self.codegen_handler_stub(Instruction::BitAnd, ip),
+                    GenericStmt::BitShl => self.codegen_handler_stub(Instruction::BitShl, ip),
+                    GenericStmt::BitShr => self.codegen_handler_stub(Instruction::BitShr, ip),
+                    GenericStmt::BitUshr => self.codegen_handler_stub(Instruction::BitUshr, ip),
+                    GenericStmt::ObjIn => self.codegen_handler_stub(Instruction::ObjIn, ip),
+                    GenericStmt::InstanceOf => self.codegen_handler_stub(Instruction::InstanceOf, ip),
+                    GenericStmt::Pos => self.codegen_handler_stub(Instruction::Pos, ip),
+                    GenericStmt::Neg => self.codegen_handler_stub(Instruction::Neg, ip),
+                    GenericStmt::Not => self.codegen_handler_stub(Instruction::Not, ip),
+                    GenericStmt::BitNot => self.codegen_handler_stub(Instruction::BitNot, ip),
+                    GenericStmt::TypeOf => self.codegen_handler_stub(Instruction::TypeOf, ip),
+                    GenericStmt::CallSymbolIterator => self.codegen_handler_stub(Instruction::CallSymbolIterator, ip),
+                    GenericStmt::CallForInIterator => self.codegen_handler_stub(Instruction::CallForInIterator, ip),
+                    GenericStmt::DeletePropertyStatic => {
+                        self.codegen_handler_stub(Instruction::DeletePropertyStatic, ip)
+                    }
+                    GenericStmt::DeletePropertyDynamic => {
+                        self.codegen_handler_stub(Instruction::DeletePropertyDynamic, ip)
+                    }
+                    GenericStmt::String => self.codegen_handler_stub(Instruction::String, ip),
+                    GenericStmt::Boolean => self.codegen_handler_stub(Instruction::Boolean, ip),
+                    GenericStmt::Regex => self.codegen_handler_stub(Instruction::Regex, ip),
+                    GenericStmt::Function => self.codegen_handler_stub(Instruction::Function, ip),
+                    GenericStmt::Null => self.codegen_handler_stub(Instruction::Null, ip),
+                    GenericStmt::Undefined => self.codegen_handler_stub(Instruction::Undefined, ip),
+                    GenericStmt::Undef => self.codegen_handler_stub(Instruction::Undef, ip),
+                    GenericStmt::Nan => self.codegen_handler_stub(Instruction::Nan, ip),
+                    GenericStmt::Infinity => self.codegen_handler_stub(Instruction::Infinity, ip),
+                    GenericStmt::Global => self.codegen_handler_stub(Instruction::Global, ip),
+                    GenericStmt::This => self.codegen_handler_stub(Instruction::This, ip),
+                    GenericStmt::NewTarget => self.codegen_handler_stub(Instruction::NewTarget, ip),
+                    GenericStmt::LdGlobal => self.codegen_handler_stub(Instruction::LdGlobal, ip),
+                    GenericStmt::TypeOfGlobalIdent => self.codegen_handler_stub(Instruction::TypeOfGlobalIdent, ip),
+                    GenericStmt::LdLocalExt => self.codegen_handler_stub(Instruction::LdLocalExt, ip),
+                    GenericStmt::Nop => self.codegen_handler_stub(Instruction::Nop, ip),
+                    GenericStmt::Debugger => self.codegen_handler_stub(Instruction::Debugger, ip),
+                    GenericStmt::ExportNamed => self.codegen_handler_stub(Instruction::ExportNamed, ip),
+                    GenericStmt::ImportStatic { .. } => self.codegen_handler_stub(Instruction::ImportStatic, ip),
+                    GenericStmt::BindThis => self.codegen_handler_stub(Instruction::BindThis, ip),
+                    GenericStmt::ExportDefault => self.codegen_handler_stub(Instruction::ExportDefault, ip),
+                    GenericStmt::ImportDyn => self.codegen_handler_stub(Instruction::ImportDyn, ip),
+                    GenericStmt::Throw => self.codegen_handler_stub(Instruction::Throw, ip),
+                    GenericStmt::Call { .. } => self.codegen_handler_stub(Instruction::Call, ip),
+                    GenericStmt::StoreGlobal { .. } => self.codegen_handler_stub(Instruction::StoreGlobal, ip),
+                    GenericStmt::StoreLocalExt { .. } => self.codegen_handler_stub(Instruction::StoreLocalExt, ip),
+                    GenericStmt::StaticPropAssign { .. } => {
+                        self.codegen_handler_stub(Instruction::StaticPropAssign, ip)
+                    }
+                    GenericStmt::DynamicPropAssign { .. } => {
+                        self.codegen_handler_stub(Instruction::DynamicPropAssign, ip)
+                    }
                 },
                 Stmt::UncheckedNumberAdd => {
                     /*
