@@ -383,6 +383,7 @@ impl BitOrAssign for Rex {
     }
 }
 
+#[derive(Debug)]
 struct ModrmEncoding {
     rex: Rex,
     modrm: u8,
@@ -543,38 +544,6 @@ pub fn movsd_reg_mem_sib(
     );
 
     encoding.write_into(buf, opcodes::MOVSD_REG_RM);
-}
-#[test]
-fn test_movsd() {
-    let mut cb = CodeBuffer::new(&Body {
-        blocks: Default::default(),
-        root: BasicBlockId(0),
-    });
-    // movsd_reg_mem_sib(&mut cb, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16);
-    // addsd_reg_mem_sib(&mut cb, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16);
-    // movsd_mem_sib_reg(&mut cb, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16);
-    /*
-      4a:   49 8b 44 08 4c          mov    0x4c(%r8,%rcx,1),%rax
-
-               mov_reg_mem_u8(
-                   &mut self.buf,
-                   check_last_value_fn,
-                   self.prologue.vtable_csreg,
-                   offset_of!(JitVtable, check_last_value).try_into().unwrap(),
-               );
-    */
-    // mov_reg_mem_u8(&mut cb, Register::Rax, Register::R12, 8);
-    // mov_reg_reg(&mut cb, Register::Rax, Register::R14);
-    // mov_reg_mem(&mut cb, Register::R10, Register::R12, 8);
-    // decq_mem(&mut cb, Register::R10, 8);
-    // dec_reg(&mut cb, Register::R10);
-    // call_reg(&mut cb, Register::Rax);
-    // test_reg_reg(&mut cb, Register::Rax, Register::R10);
-    // mov_mem_imm32(&mut cb, Register::R12, -16, 42);
-    // add_rsp_imm8(&mut cb, 8);
-    // sub_rsp_imm8(&mut cb, 8);
-    lea_reg_mem(&mut cb, Register::Rax, Register::R12, -16);
-    println!("{:x?}", cb.buffer);
 }
 
 /// Encodes `addsd <dest reg>, [<base reg> + <index reg> * <scale> + <offset imm8>]` (SIB addressing)
@@ -760,10 +729,9 @@ pub fn jmp_block(buf: &mut CodeBuffer, target: BasicBlockId) {
     }
 }
 
-#[expect(dead_code)]
 pub fn lea_reg_mem(buf: &mut CodeBuffer, dest: Register, base: Register, offset: i32) {
     let mut encoding = encode_modrm_reg_mem(RegField::Reg(dest), Mem::RegDispImm(base, offset));
-    if dest.join_register_size(base) == 64 {
+    if dest.size_bits() == 64 {
         encoding.rex |= Rex::W;
     }
     encoding.write_into(buf, &[opcodes::LEA]);
@@ -804,4 +772,305 @@ pub fn register_synthetic_block(buf: &mut CodeBuffer, label: SyntheticLabel) -> 
     }
 }
 
-// TODO: generate tests for all of these
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_buf() -> CodeBuffer {
+        CodeBuffer::new(&Body {
+            blocks: Default::default(),
+            root: BasicBlockId(0),
+        })
+    }
+
+    #[track_caller]
+    fn assert_enc(expected: &[u8], emit: impl FnOnce(&mut CodeBuffer)) {
+        let mut buf = make_buf();
+        emit(&mut buf);
+        assert_eq!(buf.buffer(), expected, "expected {expected:02x?}");
+    }
+
+    #[test]
+    fn enc_mov_reg_reg() {
+        // 64-bit, no REX extensions needed besides W
+        assert_enc(&[0x48, 0x89, 0xC0], |b| mov_reg_reg(b, Register::Rax, Register::Rax));
+        assert_enc(&[0x48, 0x89, 0xC8], |b| mov_reg_reg(b, Register::Rax, Register::Rcx));
+        assert_enc(&[0x48, 0x89, 0xC1], |b| mov_reg_reg(b, Register::Rcx, Register::Rax));
+        // 32-bit: no W bit, REX suppressed entirely
+        assert_enc(&[0x89, 0xC0], |b| mov_reg_reg(b, Register::Eax, Register::Eax));
+        // REX.B: dest is r8+
+        assert_enc(&[0x49, 0x89, 0xC0], |b| mov_reg_reg(b, Register::R8, Register::Rax));
+        // REX.R: src is r8+
+        assert_enc(&[0x4C, 0x89, 0xE8], |b| mov_reg_reg(b, Register::Rax, Register::R13));
+        // REX.R | REX.B
+        assert_enc(&[0x4D, 0x89, 0xFD], |b| mov_reg_reg(b, Register::R13, Register::R15));
+    }
+
+    #[test]
+    fn enc_push() {
+        assert_enc(&[0x55], |b| push(b, Register::Rbp));
+        assert_enc(&[0x50], |b| push(b, Register::Rax));
+        // REX.B for r8+
+        assert_enc(&[0x41, 0x55], |b| push(b, Register::R13));
+        assert_enc(&[0x41, 0x50], |b| push(b, Register::R8));
+    }
+
+    #[test]
+    fn enc_mov_reg_mem() {
+        // [rbp - 16]: mod=01, rm=101, disp8
+        assert_enc(&[0x48, 0x8B, 0x45, 0xF0], |b| {
+            mov_reg_mem(b, Register::Rax, Register::Rbp, -16)
+        });
+        assert_enc(&[0x48, 0x8B, 0x45, 0x08], |b| {
+            mov_reg_mem(b, Register::Rax, Register::Rbp, 8)
+        });
+        // 32-bit dest: no W
+        assert_enc(&[0x8B, 0x45, 0xF8], |b| {
+            mov_reg_mem(b, Register::Eax, Register::Rbp, -8)
+        });
+        // [rsp]: rm=100 forces a SIB byte with no index
+        assert_enc(&[0x48, 0x8B, 0x44, 0x24, 0x00], |b| {
+            mov_reg_mem(b, Register::Rax, Register::Rsp, 0)
+        });
+        // [r12]: SIB + REX.B
+        assert_enc(&[0x4D, 0x8B, 0x54, 0x24, 0x08], |b| {
+            mov_reg_mem(b, Register::R10, Register::R12, 8)
+        });
+        // [r13]: rm=101 with mod=01 is plain disp8, no SIB needed; REX.B only
+        assert_enc(&[0x49, 0x8B, 0x45, 0xF0], |b| {
+            mov_reg_mem(b, Register::Rax, Register::R13, -16)
+        });
+        // REX.W with rdi/rsi
+        assert_enc(&[0x48, 0x8B, 0x7E, 0x04], |b| {
+            mov_reg_mem(b, Register::Rdi, Register::Rsi, 4)
+        });
+    }
+
+    #[test]
+    fn enc_movsd_reg_mem_sib() {
+        // F2 REX.XB 0F 10, [r12 + r11*8 - 16]
+        assert_enc(&[0xF2, 0x43, 0x0F, 0x10, 0x44, 0xDC, 0xF0], |b| {
+            movsd_reg_mem_sib(b, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16)
+        });
+        // No REX at all: [rbp + rsi*4 + 8]
+        assert_enc(&[0xF2, 0x0F, 0x10, 0x4C, 0xB5, 0x08], |b| {
+            movsd_reg_mem_sib(b, Register::Xmm1, Register::Rbp, Register::Rsi, Scale::X4, 8)
+        });
+        // REX.R: dest is xmm13
+        assert_enc(&[0xF2, 0x44, 0x0F, 0x10, 0x6C, 0x08, 0x00], |b| {
+            movsd_reg_mem_sib(b, Register::Xmm13, Register::Rax, Register::Rcx, Scale::X1, 0)
+        });
+        // REX.R with scale X2
+        assert_enc(&[0xF2, 0x44, 0x0F, 0x10, 0x44, 0x50, 0x10], |b| {
+            movsd_reg_mem_sib(b, Register::Xmm8, Register::Rax, Register::Rdx, Scale::X2, 16)
+        });
+        // REX.XB: [r13 + r12*8 - 8]
+        assert_enc(&[0xF2, 0x43, 0x0F, 0x10, 0x44, 0xE5, 0xF8], |b| {
+            movsd_reg_mem_sib(b, Register::Xmm0, Register::R13, Register::R12, Scale::X8, -8)
+        });
+    }
+
+    #[test]
+    fn enc_addsd_reg_mem_sib() {
+        assert_enc(&[0xF2, 0x43, 0x0F, 0x58, 0x44, 0xDC, 0xF0], |b| {
+            addsd_reg_mem_sib(b, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16)
+        });
+        assert_enc(&[0xF2, 0x44, 0x0F, 0x58, 0x6C, 0x08, 0x00], |b| {
+            addsd_reg_mem_sib(b, Register::Xmm13, Register::Rax, Register::Rcx, Scale::X1, 0)
+        });
+    }
+
+    #[test]
+    fn enc_movsd_mem_sib_reg() {
+        assert_enc(&[0xF2, 0x43, 0x0F, 0x11, 0x44, 0xDC, 0xF0], |b| {
+            movsd_mem_sib_reg(b, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16)
+        });
+        assert_enc(&[0xF2, 0x0F, 0x11, 0x4C, 0xB5, 0x08], |b| {
+            movsd_mem_sib_reg(b, Register::Xmm1, Register::Rbp, Register::Rsi, Scale::X4, 8)
+        });
+        // REX.R: source is xmm15
+        assert_enc(&[0xF2, 0x44, 0x0F, 0x11, 0x7C, 0xC0, 0x04], |b| {
+            movsd_mem_sib_reg(b, Register::Xmm15, Register::Rax, Register::Rax, Scale::X8, 4)
+        });
+    }
+
+    #[test]
+    fn enc_decq_mem() {
+        // REX.W FF /1, [rbp - 8]
+        assert_enc(&[0x48, 0xFF, 0x4D, 0xF8], |b| decq_mem(b, Register::Rbp, -8));
+        // [r12]: SIB + REX.WB
+        assert_enc(&[0x49, 0xFF, 0x4C, 0x24, 0xF0], |b| decq_mem(b, Register::R12, -16));
+        // [r13]: REX.WB, disp8
+        assert_enc(&[0x49, 0xFF, 0x4D, 0x04], |b| decq_mem(b, Register::R13, 4));
+        assert_enc(&[0x48, 0xFF, 0x48, 0x00], |b| decq_mem(b, Register::Rax, 0));
+    }
+
+    #[test]
+    fn enc_dec_reg() {
+        assert_enc(&[0x48, 0xFF, 0xC8], |b| dec_reg(b, Register::Rax));
+        // REX.WB
+        assert_enc(&[0x49, 0xFF, 0xCA], |b| dec_reg(b, Register::R10));
+        assert_enc(&[0x49, 0xFF, 0xCD], |b| dec_reg(b, Register::R13));
+        assert_enc(&[0x49, 0xFF, 0xCF], |b| dec_reg(b, Register::R15));
+        // 32-bit: no W, REX suppressed
+        assert_enc(&[0xFF, 0xC8], |b| dec_reg(b, Register::Eax));
+    }
+
+    #[test]
+    fn enc_mov_reg_imm32() {
+        assert_enc(&[0xB8, 0x44, 0x33, 0x22, 0x11], |b| {
+            mov_reg_imm32(b, Register::Rax, 0x1122_3344)
+        });
+        assert_enc(&[0xB9, 0xEF, 0xBE, 0xAD, 0xDE], |b| {
+            mov_reg_imm32(b, Register::Rcx, 0xDEAD_BEEF)
+        });
+        assert_enc(&[0xB8, 0x2A, 0x00, 0x00, 0x00], |b| mov_reg_imm32(b, Register::Eax, 42));
+        // REX.B
+        assert_enc(&[0x41, 0xB9, 0x44, 0x33, 0x22, 0x11], |b| {
+            mov_reg_imm32(b, Register::R9, 0x1122_3344)
+        });
+        assert_enc(&[0x41, 0xBF, 0x00, 0x00, 0x00, 0x00], |b| {
+            mov_reg_imm32(b, Register::R15, 0)
+        });
+    }
+
+    #[test]
+    fn enc_call_reg() {
+        assert_enc(&[0xFF, 0xD0], |b| call_reg(b, Register::Rax));
+        assert_enc(&[0xFF, 0xD1], |b| call_reg(b, Register::Rcx));
+        // REX.B
+        assert_enc(&[0x41, 0xFF, 0xD2], |b| call_reg(b, Register::R10));
+        assert_enc(&[0x41, 0xFF, 0xD5], |b| call_reg(b, Register::R13));
+    }
+
+    #[test]
+    fn enc_test_reg_reg() {
+        assert_enc(&[0x48, 0x85, 0xC0], |b| test_reg_reg(b, Register::Rax, Register::Rax));
+        // 32-bit: no W
+        assert_enc(&[0x85, 0xC0], |b| test_reg_reg(b, Register::Eax, Register::Eax));
+        // REX.B: rm is r10
+        assert_enc(&[0x49, 0x85, 0xC2], |b| test_reg_reg(b, Register::Rax, Register::R10));
+        // REX.R: reg is r13
+        assert_enc(&[0x4C, 0x85, 0xE8], |b| test_reg_reg(b, Register::R13, Register::Rax));
+        // REX.RB
+        assert_enc(&[0x4D, 0x85, 0xFF], |b| test_reg_reg(b, Register::R15, Register::R15));
+    }
+
+    #[test]
+    fn enc_mov_mem_imm32() {
+        assert_enc(&[0xC7, 0x45, 0xF0, 0x2A, 0x00, 0x00, 0x00], |b| {
+            mov_mem_imm32(b, Register::Rbp, -16, 42)
+        });
+        // REX.B + SIB for [r12]
+        assert_enc(&[0x41, 0xC7, 0x44, 0x24, 0xF0, 0x2A, 0x00, 0x00, 0x00], |b| {
+            mov_mem_imm32(b, Register::R12, -16, 42)
+        });
+        // REX.B for [r13], negative immediate
+        assert_enc(&[0x41, 0xC7, 0x45, 0x08, 0xFF, 0xFF, 0xFF, 0xFF], |b| {
+            mov_mem_imm32(b, Register::R13, 8, -1)
+        });
+        assert_enc(&[0xC7, 0x40, 0x00, 0xFF, 0xFF, 0xFF, 0x7F], |b| {
+            mov_mem_imm32(b, Register::Rax, 0, i32::MAX)
+        });
+    }
+
+    #[test]
+    fn enc_ret() {
+        assert_enc(&[0xC3], ret);
+    }
+
+    #[test]
+    fn enc_pop() {
+        assert_enc(&[0x5D], |b| pop(b, Register::Rbp));
+        assert_enc(&[0x58], |b| pop(b, Register::Rax));
+        // REX.B for r8+
+        assert_enc(&[0x41, 0x5D], |b| pop(b, Register::R13));
+        assert_enc(&[0x41, 0x5F], |b| pop(b, Register::R15));
+    }
+
+    #[test]
+    fn enc_add_rsp_imm8() {
+        assert_enc(&[0x48, 0x83, 0xC4, 0x08], |b| add_rsp_imm8(b, 8));
+        assert_enc(&[0x48, 0x83, 0xC4, 0x20], |b| add_rsp_imm8(b, 32));
+    }
+
+    #[test]
+    fn enc_sub_rsp_imm8() {
+        assert_enc(&[0x48, 0x83, 0xEC, 0x08], |b| sub_rsp_imm8(b, 8));
+        assert_enc(&[0x48, 0x83, 0xEC, 0x28], |b| sub_rsp_imm8(b, 40));
+    }
+
+    #[test]
+    fn enc_cmp_reg_al_imm8() {
+        assert_enc(&[0x3C, 0x2A], |b| cmp_reg_al_imm8(b, 42));
+        assert_enc(&[0x3C, 0x00], |b| cmp_reg_al_imm8(b, 0));
+        assert_enc(&[0x3C, 0xFF], |b| cmp_reg_al_imm8(b, u8::MAX));
+    }
+
+    #[test]
+    fn enc_jne_imm32() {
+        let mut buf = make_buf();
+        let ip = jne_imm32(&mut buf, 0x1122_3344);
+        assert_eq!(ip, 2);
+        assert_eq!(buf.buffer(), &[0x0F, 0x85, 0x44, 0x33, 0x22, 0x11]);
+
+        let mut buf = make_buf();
+        let ip = jne_imm32(&mut buf, -1);
+        assert_eq!(ip, 2);
+        assert_eq!(buf.buffer(), &[0x0F, 0x85, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+        let mut buf = make_buf();
+        let ip = jne_imm32(&mut buf, i32::MAX);
+        assert_eq!(ip, 2);
+        assert_eq!(buf.buffer(), &[0x0F, 0x85, 0xFF, 0xFF, 0xFF, 0x7F]);
+    }
+
+    #[test]
+    fn enc_je_imm32() {
+        let mut buf = make_buf();
+        let ip = je_imm32(&mut buf, 0x1122_3344);
+        assert_eq!(ip, 2);
+        assert_eq!(buf.buffer(), &[0x0F, 0x84, 0x44, 0x33, 0x22, 0x11]);
+
+        let mut buf = make_buf();
+        let ip = je_imm32(&mut buf, -16);
+        assert_eq!(ip, 2);
+        assert_eq!(buf.buffer(), &[0x0F, 0x84, 0xF0, 0xFF, 0xFF, 0xFF]);
+    }
+
+    #[test]
+    fn enc_jmp_imm32() {
+        let mut buf = make_buf();
+        let ip = jmp_imm32(&mut buf, 0x1122_3344);
+        assert_eq!(ip, 1);
+        assert_eq!(buf.buffer(), &[0xE9, 0x44, 0x33, 0x22, 0x11]);
+
+        let mut buf = make_buf();
+        let ip = jmp_imm32(&mut buf, -16);
+        assert_eq!(ip, 1);
+        assert_eq!(buf.buffer(), &[0xE9, 0xF0, 0xFF, 0xFF, 0xFF]);
+    }
+
+    #[test]
+    fn enc_lea_reg_mem() {
+        assert_enc(&[0x48, 0x8D, 0x45, 0xF0], |b| {
+            lea_reg_mem(b, Register::Rax, Register::Rbp, -16)
+        });
+        // REX.WB + SIB for [r12 - 16]
+        assert_enc(&[0x49, 0x8D, 0x44, 0x24, 0xF0], |b| {
+            lea_reg_mem(b, Register::Rax, Register::R12, -16)
+        });
+        // REX.WB for [r13 + 8], no SIB
+        assert_enc(&[0x49, 0x8D, 0x45, 0x08], |b| {
+            lea_reg_mem(b, Register::Rax, Register::R13, 8)
+        });
+        // 32-bit: no W
+        assert_enc(&[0x8D, 0x45, 0xF0], |b| {
+            lea_reg_mem(b, Register::Eax, Register::Rbp, -16)
+        });
+        // REX.WR
+        assert_enc(&[0x4C, 0x8D, 0x55, 0x10], |b| {
+            lea_reg_mem(b, Register::R10, Register::Rbp, 16)
+        });
+    }
+}
