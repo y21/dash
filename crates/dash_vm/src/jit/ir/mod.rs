@@ -133,10 +133,23 @@ index_type! {
     pub struct StmtId(pub u32);
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum ValueSource {
+    Float(f64),
+    Stack,
+}
+
 #[derive(Debug)]
 pub enum Stmt {
-    /// Adds the top two numbers on the stack without any type checks.
-    UncheckedNumberAdd,
+    /// Adds two numbers without any type checks.
+    UncheckedNumberAdd {
+        lhs: ValueSource,
+        rhs: ValueSource,
+    },
+    UncheckedNumberLt {
+        lhs: ValueSource,
+        rhs: ValueSource,
+    },
     /// Non-specialized, generic statement, directly lowered from source bytecode
     Generic(GenericStmt, Ip),
 }

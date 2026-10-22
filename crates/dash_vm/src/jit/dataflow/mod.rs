@@ -6,7 +6,7 @@ use dash_middle::indexvec::IndexVec;
 use crate::jit::dataflow::join::{Join, JoinChange, join_slice};
 use crate::jit::dataflow::value::{ValueMetadata, ValueType};
 use crate::jit::ir::{
-    BasicBlockId, Body, BranchTarget, ConditionalGotoPopPolicy, GenericStmt, Stmt, StmtId, Terminator,
+    BasicBlockId, Body, BranchTarget, ConditionalGotoPopPolicy, GenericStmt, Stmt, StmtId, Terminator, ValueSource,
 };
 use crate::localscope::LocalScope;
 use crate::value::{Unpack, ValueKind};
@@ -143,6 +143,13 @@ fn apply_terminator(state: &mut BlockState, terminator: &Terminator) {
             ConditionalGotoPopPolicy::Pop => drop(state.stack.pop().unwrap()),
             ConditionalGotoPopPolicy::Peek => {}
         },
+    }
+}
+
+fn value_metadata_from_source(state: &mut BlockState, source: ValueSource) -> ValueMetadata {
+    match source {
+        ValueSource::Stack => state.stack.pop().unwrap(),
+        ValueSource::Float(_) => ValueMetadata { ty: ValueType::Number },
     }
 }
 
@@ -433,11 +440,20 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
                 state.stack.push(out_ty);
             }
         },
-        Stmt::UncheckedNumberAdd => {
-            let rhs = state.stack.pop().unwrap();
-            let lhs = state.stack.pop().unwrap();
+        Stmt::UncheckedNumberAdd { lhs, rhs } => {
+            let lhs = value_metadata_from_source(state, lhs);
+            let rhs = value_metadata_from_source(state, rhs);
+
             let out_ty = ValueMetadata { ty: ValueType::Number };
             assert!(lhs == out_ty && rhs == out_ty);
+            state.stack.push(out_ty);
+        }
+        Stmt::UncheckedNumberLt { lhs, rhs } => {
+            let lhs = value_metadata_from_source(state, lhs);
+            let rhs = value_metadata_from_source(state, rhs);
+
+            let out_ty = ValueMetadata { ty: ValueType::Boolean };
+            assert!(lhs == rhs && rhs.ty == ValueType::Number);
             state.stack.push(out_ty);
         }
     }

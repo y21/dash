@@ -1,6 +1,6 @@
 use crate::jit::dataflow::DataflowEngine;
 use crate::jit::dataflow::value::ValueType;
-use crate::jit::ir::{Body, GenericStmt, Stmt};
+use crate::jit::ir::{Body, GenericStmt, Stmt, ValueSource};
 use crate::jit::passes::PassResult;
 
 pub fn run(body: &mut Body, dataflow: &mut DataflowEngine) -> PassResult {
@@ -21,7 +21,24 @@ pub fn run(body: &mut Body, dataflow: &mut DataflowEngine) -> PassResult {
                     };
 
                     if lhs.ty == rhs.ty && lhs.ty == ValueType::Number {
-                        body.blocks[block].stmts[stmt] = Stmt::UncheckedNumberAdd;
+                        body.blocks[block].stmts[stmt] = Stmt::UncheckedNumberAdd {
+                            lhs: ValueSource::Stack,
+                            rhs: ValueSource::Stack,
+                        };
+                        result = PassResult::Changed;
+                        cursor.invalidate_block(body, stmt);
+                    }
+                }
+                Stmt::Generic(GenericStmt::Lt, _) => {
+                    let [.., lhs, rhs] = &*state.stack else {
+                        panic!("Stack mismatch")
+                    };
+
+                    if lhs.ty == rhs.ty && lhs.ty == ValueType::Number {
+                        body.blocks[block].stmts[stmt] = Stmt::UncheckedNumberLt {
+                            lhs: ValueSource::Stack,
+                            rhs: ValueSource::Stack,
+                        };
                         result = PassResult::Changed;
                         cursor.invalidate_block(body, stmt);
                     }

@@ -8,15 +8,15 @@ use crate::jit::compiler::backend::{
     PrologueData, REG_ARG1, REG_ARG2, REG_ARG3, REG_ARG4, REG_RETURN32, REG_RETURN64, REG_STACK_RELATIVE, Register,
     Scale, addsd_reg_mem_sib, call_reg, cmp_reg_al_imm8, codegen_epilogue, codegen_prologue, decq_mem, je_block,
     je_branch_target, je_synthetic_label, jmp_block, jmp_branch_target, jmp_synthetic_label, jne_block,
-    jne_synthetic_label, mov_mem_imm32, mov_reg_imm32, mov_reg_mem, mov_reg_reg, movsd_mem_sib_reg, movsd_reg_mem_sib,
-    register_synthetic_block, register_user_block, test_reg_reg, usable_callee_saved_regs, usable_caller_saved_gprs,
-    usable_fprs,
+    jne_synthetic_label, mov_mem_imm32, mov_mem_reg_scaled, mov_reg_imm32, mov_reg_mem, mov_reg_reg, movsd_mem_sib_reg,
+    movsd_reg_mem_sib, register_synthetic_block, register_user_block, seta_reg, test_reg_reg, ucomisd_reg_mem_sib,
+    usable_callee_saved_regs, usable_caller_saved_gprs, usable_fprs, xor_reg_reg,
 };
 use crate::jit::compiler::codebuffer::CodeBuffer;
-use crate::jit::compiler::jumpresolver::{CpuIp, SyntheticLabel};
+use crate::jit::compiler::jumpresolver::SyntheticLabel;
 use crate::jit::compiler::offsets::{VecOffsets, get_vec_offsets};
-use crate::jit::dataflow::{BlockState, DataflowEngine};
-use crate::jit::ir::{BasicBlockId, Body, BranchTarget, ConditionalGotoPopPolicy, GenericStmt, Stmt, Terminator};
+use crate::jit::dataflow::DataflowEngine;
+use crate::jit::ir::{BasicBlockId, Body, BranchTarget, GenericStmt, Stmt, Terminator, ValueSource};
 use crate::jit::mmap::MmapFn;
 use crate::jit::{JitOutData, JitVtable};
 use crate::localscope::LocalScope;
@@ -80,6 +80,32 @@ impl<'a> CodegenCx<'a> {
         jne_synthetic_label(&mut self.buf, SyntheticLabel::StubStatusHandler);
     }
 
+    fn codegen_ld_stack_base(&mut self, dest: Register) -> usize {
+        let stack_ptr_offset = offset_of!(Vm, stack) + self.stack_vec_offsets.ptr;
+
+        mov_reg_mem(
+            &mut self.buf,
+            dest,
+            self.prologue.vm_csreg,
+            stack_ptr_offset.try_into().unwrap(),
+        );
+
+        stack_ptr_offset
+    }
+
+    fn codegen_ld_stack_len(&mut self, dest: Register) -> usize {
+        let stack_len_offset = offset_of!(Vm, stack) + self.stack_vec_offsets.len;
+
+        mov_reg_mem(
+            &mut self.buf,
+            dest,
+            self.prologue.vm_csreg,
+            stack_len_offset.try_into().unwrap(),
+        );
+
+        stack_len_offset
+    }
+
     fn codegen_block(&mut self, block: BasicBlockId) {
         // If the user block has already been registered, we don't need to codegen again.
         if !register_user_block(&mut self.buf, block) {
@@ -87,11 +113,6 @@ impl<'a> CodegenCx<'a> {
         }
 
         for stmt in self.body.blocks[block].stmts.iter_indices() {
-            println!(
-                "Emitting {:?} at {:x?}",
-                self.body.blocks[block].stmts[stmt],
-                self.buf.offset()
-            );
             match self.body.blocks[block].stmts[stmt] {
                 Stmt::Generic(ref generic_stmt, ip) => match *generic_stmt {
                     GenericStmt::LdLocal(_) => self.codegen_handler_stub(Instruction::LdLocal, ip),
@@ -196,7 +217,9 @@ impl<'a> CodegenCx<'a> {
                         self.codegen_handler_stub(Instruction::DynamicPropAssign, ip)
                     }
                 },
-                Stmt::UncheckedNumberAdd => {
+                Stmt::UncheckedNumberAdd { lhs, rhs } => {
+                    assert!(lhs == rhs && lhs == ValueSource::Stack); // for now, implementation is hardcoded to read from stack
+
                     /*
                     vm->stack[vm->stack.len - 2] = vm->stack[vm->stack.len - 2] + vm->stack[vm->stack.len - 1];
                     vm->stack.len -= 1;
@@ -217,24 +240,8 @@ impl<'a> CodegenCx<'a> {
                     let stack_ptr_reg = self.caller_gpr();
                     let fpr = self.fpr();
 
-                    let stack_ptr_offset = offset_of!(Vm, stack) + self.stack_vec_offsets.ptr;
-                    let stack_len_offset = offset_of!(Vm, stack) + self.stack_vec_offsets.len;
-
-                    // Store stack base
-                    mov_reg_mem(
-                        &mut self.buf,
-                        stack_ptr_reg,
-                        self.prologue.vm_csreg,
-                        stack_ptr_offset.try_into().unwrap(),
-                    );
-
-                    // Store len field
-                    mov_reg_mem(
-                        &mut self.buf,
-                        len_reg,
-                        self.prologue.vm_csreg,
-                        stack_len_offset.try_into().unwrap(),
-                    );
+                    self.codegen_ld_stack_base(stack_ptr_reg);
+                    let stack_len_offset = self.codegen_ld_stack_len(len_reg);
 
                     // Load second-to-last stack value as an f64
                     movsd_reg_mem_sib(
@@ -277,11 +284,66 @@ impl<'a> CodegenCx<'a> {
                     self.add_caller_reg(stack_ptr_reg);
                     self.add_caller_reg(len_reg);
                 }
+                Stmt::UncheckedNumberLt { lhs, rhs } => {
+                    assert_eq!(lhs, ValueSource::Stack);
+                    assert_eq!(rhs, ValueSource::Stack); // TODO: only stack implemented for now
+
+                    let stack_ptr_reg = self.caller_gpr();
+                    let len_reg = self.caller_gpr();
+                    let status_reg = self.caller_gpr();
+                    assert_eq!(status_reg.size_bits(), 64);
+                    let status32_reg = status_reg.to_32();
+                    let status8_reg = status_reg.to_8();
+                    let fpr = self.fpr();
+
+                    self.codegen_ld_stack_base(stack_ptr_reg);
+                    let stack_len_offset = self.codegen_ld_stack_len(len_reg);
+
+                    movsd_reg_mem_sib(
+                        &mut self.buf,
+                        fpr,
+                        stack_ptr_reg,
+                        len_reg,
+                        Scale::target_pointer_with(),
+                        -i32::try_from(size_of::<usize>() * 1).unwrap(),
+                    );
+
+                    xor_reg_reg(&mut self.buf, status32_reg, status32_reg);
+
+                    ucomisd_reg_mem_sib(
+                        &mut self.buf,
+                        fpr,
+                        stack_ptr_reg,
+                        len_reg,
+                        Scale::target_pointer_with(),
+                        -i32::try_from(size_of::<usize>() * 2).unwrap(),
+                    );
+
+                    seta_reg(&mut self.buf, status8_reg);
+
+                    mov_mem_reg_scaled(
+                        &mut self.buf,
+                        status_reg,
+                        stack_ptr_reg,
+                        len_reg,
+                        Scale::target_pointer_with(),
+                        -i32::try_from(size_of::<usize>() * 2).unwrap(),
+                    );
+
+                    decq_mem(
+                        &mut self.buf,
+                        self.prologue.vm_csreg,
+                        stack_len_offset.try_into().unwrap(),
+                    );
+
+                    self.add_fpr(fpr);
+                    self.add_caller_reg(len_reg);
+                    self.add_caller_reg(stack_ptr_reg);
+                }
             }
         }
 
         let terminator = self.body.blocks[block].terminator();
-        println!("Emitting {:?} at {:x?}", terminator, self.buf.offset());
         match *terminator {
             Terminator::Goto(target) => match target {
                 BranchTarget::Block(target) => {

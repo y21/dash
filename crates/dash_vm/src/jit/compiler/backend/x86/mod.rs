@@ -6,6 +6,7 @@ mod modrm {
 
 #[expect(dead_code)]
 mod rex {
+    // TODO: remove these in favor of the Rex enum
     pub const W: u8 = 0x08;
     pub const R: u8 = 0x04;
     pub const X: u8 = 0x02;
@@ -33,8 +34,11 @@ mod opcodes {
     pub const MOVSD_REG_RM: &[u8] = &[0x0F, 0x10];
     pub const ADDSD_REG_RM: &[u8] = &[0x0F, 0x58];
     pub const MOVSD_RM_REG: &[u8] = &[0x0F, 0x11];
+    pub const UCOMISD_REG_RM: &[u8] = &[0x0F, 0x2E];
     pub const DEC_RM64: u8 = 0xFF;
     pub const CALL_RM64: u8 = 0xFF;
+    pub const XOR: u8 = 0x31;
+    pub const SETA_RM8: &[u8] = &[0x0F, 0x97];
 }
 
 use std::mem::offset_of;
@@ -45,228 +49,12 @@ use dash_middle::indexvec::IndexVec;
 
 use crate::frame::Ip;
 use crate::jit::JitVtable;
+use crate::jit::compiler::backend::x86::register::Register;
 use crate::jit::compiler::codebuffer::CodeBuffer;
 use crate::jit::compiler::jumpresolver::{CpuIp, PatchData, SyntheticLabel};
 use crate::jit::ir::{BasicBlockId, Body};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[expect(dead_code)]
-pub enum Register {
-    Al,
-    Rax,
-    Eax,
-    R8,
-    Rbp,
-    Rsp,
-    R9,
-    R10,
-    R11,
-    R12,
-    R13,
-    R14,
-    R15,
-    Rdi,
-    Rsi,
-    Rdx,
-    Rcx,
-    Rbx,
-
-    Xmm0,
-    Xmm1,
-    Xmm2,
-    Xmm3,
-    Xmm4,
-    Xmm5,
-    Xmm6,
-    Xmm7,
-    Xmm8,
-    Xmm9,
-    Xmm10,
-    Xmm11,
-    Xmm12,
-    Xmm13,
-    Xmm14,
-    Xmm15,
-}
-
-impl Register {
-    pub fn size_bits(self) -> u32 {
-        match self {
-            Register::Rax
-            | Register::R8
-            | Register::Rbp
-            | Register::R12
-            | Register::R13
-            | Register::Rsp
-            | Register::Rdi
-            | Register::Rsi
-            | Register::R14
-            | Register::R15
-            | Register::Rdx
-            | Register::Rcx
-            | Register::Rbx
-            | Register::R9
-            | Register::R10
-            | Register::R11
-            | Register::Xmm0
-            | Register::Xmm1
-            | Register::Xmm2
-            | Register::Xmm3
-            | Register::Xmm4
-            | Register::Xmm5
-            | Register::Xmm6
-            | Register::Xmm7
-            | Register::Xmm8
-            | Register::Xmm9
-            | Register::Xmm10
-            | Register::Xmm11
-            | Register::Xmm12
-            | Register::Xmm13
-            | Register::Xmm14
-            | Register::Xmm15 => 64,
-            Register::Eax => 32,
-            Register::Al => 8,
-        }
-    }
-
-    /// Require that the size of the register is the same as the size of the other register, and return it.
-    pub fn join_register_size(self, other: Register) -> u32 {
-        assert_eq!(
-            self.size_bits(),
-            other.size_bits(),
-            "Register {self:?} of size {} does not match register {other:?} of size {}",
-            self.size_bits(),
-            other.size_bits()
-        );
-        self.size_bits()
-    }
-
-    pub fn reg_field(self) -> u8 {
-        match self {
-            Register::Rax | Register::Eax | Register::Al | Register::R8 | Register::Xmm0 | Register::Xmm8 => 0,
-            Register::Rcx | Register::R9 | Register::Xmm1 | Register::Xmm9 => 1,
-            Register::Rdx | Register::R10 | Register::Xmm2 | Register::Xmm10 => 2,
-            Register::Rbx | Register::R11 | Register::Xmm3 | Register::Xmm11 => 3,
-            Register::Rsp | Register::R12 | Register::Xmm4 | Register::Xmm12 => 4,
-            Register::Rbp | Register::R13 | Register::Xmm5 | Register::Xmm13 => 5,
-            Register::Rsi | Register::R14 | Register::Xmm6 | Register::Xmm14 => 6,
-            Register::Rdi | Register::R15 | Register::Xmm7 | Register::Xmm15 => 7,
-        }
-    }
-
-    const RM_FIELD_NEEDS_SIB: u8 = 0b100;
-    pub fn rm_field(self) -> u8 {
-        match self {
-            Register::Al | Register::Eax | Register::Rax | Register::Xmm0 | Register::R8 | Register::Xmm8 => 0b000,
-            Register::Rcx | Register::Xmm1 | Register::R9 | Register::Xmm9 => 0b001,
-            Register::Rdx | Register::Xmm2 | Register::R10 | Register::Xmm10 => 0b010,
-            Register::Rbx | Register::Xmm3 | Register::R11 | Register::Xmm11 => 0b011,
-            Register::Rsp | Register::Xmm4 | Register::R12 | Register::Xmm12 => 0b100,
-            Register::Rbp | Register::Xmm5 | Register::R13 | Register::Xmm13 => 0b101,
-            Register::Rsi | Register::Xmm6 | Register::R14 | Register::Xmm14 => 0b110,
-            Register::Rdi | Register::Xmm7 | Register::R15 | Register::Xmm15 => 0b111,
-        }
-    }
-
-    pub fn needs_rex_prefix(self) -> bool {
-        match self {
-            Register::R8
-            | Register::R9
-            | Register::R10
-            | Register::R11
-            | Register::R12
-            | Register::R13
-            | Register::R14
-            | Register::R15
-            | Register::Xmm8
-            | Register::Xmm9
-            | Register::Xmm10
-            | Register::Xmm11
-            | Register::Xmm12
-            | Register::Xmm13
-            | Register::Xmm14
-            | Register::Xmm15 => true,
-            Register::Rax
-            | Register::Eax
-            | Register::Rbp
-            | Register::Rsp
-            | Register::Rdi
-            | Register::Rsi
-            | Register::Rdx
-            | Register::Al
-            | Register::Rcx
-            | Register::Rbx
-            | Register::Xmm0
-            | Register::Xmm1
-            | Register::Xmm2
-            | Register::Xmm3
-            | Register::Xmm4
-            | Register::Xmm5
-            | Register::Xmm6
-            | Register::Xmm7 => false,
-        }
-    }
-}
-
-pub fn usable_callee_saved_regs() -> Vec<Register> {
-    // Intentionally in reverse order such that pop() will yield regs that don't need a REX prefix first
-    vec![
-        // Register::Rbx,
-        // Register::R12,
-        // Register::R13,
-        // Register::R14,
-        // Register::R15,
-        Register::R15,
-        Register::R14,
-        Register::R13,
-        Register::R12,
-        Register::Rbx,
-    ]
-}
-pub fn usable_caller_saved_gprs() -> Vec<Register> {
-    // Intentionally in reverse order such that pop() will yield regs that don't need a REX prefix first
-    vec![
-        // Register::Rax,
-        // Register::Rcx,
-        // Register::Rdx,
-        // Register::Rsi,
-        // Register::Rdi,
-        // Register::R8,
-        // Register::R9,
-        // Register::R10,
-        // Register::R11,
-        Register::R11,
-        Register::R10,
-        Register::R9,
-        Register::R8,
-        Register::Rdi,
-        Register::Rsi,
-        Register::Rdx,
-        Register::Rcx,
-        Register::Rax,
-    ]
-}
-pub fn usable_fprs() -> Vec<Register> {
-    // Intentionally in reverse order such that pop() will yield regs that don't need a REX prefix first
-    vec![
-        Register::Xmm15,
-        Register::Xmm14,
-        Register::Xmm13,
-        Register::Xmm12,
-        Register::Xmm11,
-        Register::Xmm10,
-        Register::Xmm9,
-        Register::Xmm8,
-        Register::Xmm7,
-        Register::Xmm6,
-        Register::Xmm5,
-        Register::Xmm4,
-        Register::Xmm3,
-        Register::Xmm2,
-        Register::Xmm1,
-        Register::Xmm0,
-    ]
-}
+pub mod register;
 
 pub const REG_ARG1: Register = Register::Rdi;
 pub const REG_ARG2: Register = Register::Rsi;
@@ -332,11 +120,34 @@ pub fn mov_reg_reg(buf: &mut CodeBuffer, dest: Register, src: Register) {
     encoding.write_into(buf, &[opcodes::MOV_RM_R]);
 }
 
+pub fn mov_mem_reg_scaled(
+    buf: &mut CodeBuffer,
+    src: Register,
+    base: Register,
+    index: Register,
+    scale: Scale,
+    offset: i32,
+) {
+    let mut encoding = encode_modrm_reg_mem(
+        RegField::Reg(src),
+        Mem::RegScaledIndexImm {
+            base,
+            index,
+            scale,
+            offset,
+        },
+    );
+    if src.size_bits() == 64 {
+        encoding.rex |= Rex::W;
+    }
+    encoding.write_into(buf, &[opcodes::MOV_RM_R]);
+}
+
 pub fn push(buf: &mut CodeBuffer, reg: Register) {
     if reg.needs_rex_prefix() {
         buf.push(rex::BASE | rex::B);
     }
-    buf.push(opcodes::PUSH_REG + reg.reg_field());
+    buf.push(opcodes::PUSH_REG + reg.fields());
 }
 
 /// Encodes `mov <dest reg>, [<base reg> + <offset imm8>]`
@@ -413,7 +224,7 @@ enum RegField {
 }
 
 fn build_sib(scale: Scale, index: Option<Register>, base: Register) -> u8 {
-    (scale as u8) << 6 | (index.map_or(0b100, |r| r.reg_field()) << 3) | base.reg_field()
+    (scale as u8) << 6 | (index.map_or(0b100, |r| r.fields()) << 3) | base.fields()
 }
 
 fn encode_modrm_reg_reg(reg: RegField, rm: Register) -> ModrmEncoding {
@@ -424,7 +235,7 @@ fn encode_modrm_reg_reg(reg: RegField, rm: Register) -> ModrmEncoding {
             if register.needs_rex_prefix() {
                 rex |= Rex::R;
             }
-            register.reg_field()
+            register.fields()
         }
         RegField::Bits(bits) => bits,
     };
@@ -463,7 +274,7 @@ fn encode_modrm_reg_mem(reg: RegField, rm: Mem) -> ModrmEncoding {
             if register.needs_rex_prefix() {
                 rex |= Rex::R;
             }
-            modrm |= register.reg_field() << 3;
+            modrm |= register.fields() << 3;
         }
         RegField::Bits(bits) => modrm |= bits << 3,
     }
@@ -522,7 +333,7 @@ fn encode_modrm_reg_mem(reg: RegField, rm: Mem) -> ModrmEncoding {
     }
 }
 
-/// Encodes `movsd <dest reg>, [<base reg> + <index reg> * <scale> + <offset imm8>]` (SIB addressing)
+/// Encodes `movsd <dest reg>, [<base reg> + <index reg> * <scale> + <offset imm>]` (SIB addressing)
 pub fn movsd_reg_mem_sib(
     buf: &mut CodeBuffer,
     dest: Register,
@@ -544,6 +355,46 @@ pub fn movsd_reg_mem_sib(
     );
 
     encoding.write_into(buf, opcodes::MOVSD_REG_RM);
+}
+
+/// Encodes `ucomisd <lhs reg>, [<base reg> + <index reg> * <scale> + <offset imm>]` (SIB addressing)
+pub fn ucomisd_reg_mem_sib(
+    buf: &mut CodeBuffer,
+    lhs: Register,
+    base: Register,
+    index: Register,
+    scale: Scale,
+    offset: i32,
+) {
+    buf.push(0x66);
+
+    let encoding = encode_modrm_reg_mem(
+        RegField::Reg(lhs),
+        Mem::RegScaledIndexImm {
+            base,
+            index,
+            scale,
+            offset,
+        },
+    );
+
+    encoding.write_into(buf, opcodes::UCOMISD_REG_RM);
+}
+
+/// Encodes `xor <dest reg>, <src reg>` instruction
+pub fn xor_reg_reg(buf: &mut CodeBuffer, dest: Register, src: Register) {
+    let mut encoding = encode_modrm_reg_reg(RegField::Reg(dest), src);
+    if dest.join_register_size(src) == 64 {
+        encoding.rex |= Rex::W;
+    }
+    encoding.write_into(buf, &[opcodes::XOR]);
+}
+
+/// Encodes `seta <dest reg>` instruction
+pub fn seta_reg(buf: &mut CodeBuffer, dest: Register) {
+    assert!(dest.size_bits() == 8);
+    let encoding = encode_modrm_reg_reg(RegField::Bits(0), dest);
+    encoding.write_into(buf, opcodes::SETA_RM8);
 }
 
 /// Encodes `addsd <dest reg>, [<base reg> + <index reg> * <scale> + <offset imm8>]` (SIB addressing)
@@ -612,7 +463,7 @@ pub fn mov_reg_imm32(buf: &mut CodeBuffer, reg: Register, imm: u32) {
     if reg.needs_rex_prefix() {
         buf.push(rex::BASE | rex::B);
     }
-    buf.push(opcodes::MOV_REG_IMM32 + reg.reg_field());
+    buf.push(opcodes::MOV_REG_IMM32 + reg.fields());
     buf.extend_from_slice(&imm.to_le_bytes());
 }
 
@@ -641,7 +492,7 @@ pub fn pop(buf: &mut CodeBuffer, reg: Register) {
     if reg.needs_rex_prefix() {
         buf.push(rex::BASE | rex::B);
     }
-    buf.push(opcodes::POP_REG + reg.reg_field());
+    buf.push(opcodes::POP_REG + reg.fields());
 }
 
 pub fn add_rsp_imm8(buf: &mut CodeBuffer, imm: u8) {
@@ -935,6 +786,19 @@ mod tests {
     }
 
     #[test]
+    fn enc_mov_mem_reg_scaled() {
+        assert_enc(&[0x48, 0x89, 0x54, 0xC8, 0xF0], |b| {
+            mov_mem_reg_scaled(b, Register::Rdx, Register::Rax, Register::Rcx, Scale::X8, -16)
+        });
+        assert_enc(&[0x89, 0x44, 0xC8, 0xF0], |b| {
+            mov_mem_reg_scaled(b, Register::Eax, Register::Rax, Register::Rcx, Scale::X8, -16)
+        });
+        assert_enc(&[0x4c, 0x89, 0x5c, 0xC8, 0xF0], |b| {
+            mov_mem_reg_scaled(b, Register::R11, Register::Rax, Register::Rcx, Scale::X8, -16)
+        });
+    }
+
+    #[test]
     fn enc_call_reg() {
         assert_enc(&[0xFF, 0xD0], |b| call_reg(b, Register::Rax));
         assert_enc(&[0xFF, 0xD1], |b| call_reg(b, Register::Rcx));
@@ -954,6 +818,19 @@ mod tests {
         assert_enc(&[0x4C, 0x85, 0xE8], |b| test_reg_reg(b, Register::R13, Register::Rax));
         // REX.RB
         assert_enc(&[0x4D, 0x85, 0xFF], |b| test_reg_reg(b, Register::R15, Register::R15));
+    }
+
+    #[test]
+    fn enc_xor() {
+        assert_enc(&[0x48, 0x31, 0xC0], |b| xor_reg_reg(b, Register::Rax, Register::Rax));
+        // 32-bit: no W
+        assert_enc(&[0x31, 0xC0], |b| xor_reg_reg(b, Register::Eax, Register::Eax));
+        // REX.B: source is r10
+        assert_enc(&[0x49, 0x31, 0xC2], |b| xor_reg_reg(b, Register::Rax, Register::R10));
+        // REX.R: dest is r13
+        assert_enc(&[0x4C, 0x31, 0xE8], |b| xor_reg_reg(b, Register::R13, Register::Rax));
+        // REX.RB
+        assert_enc(&[0x4D, 0x31, 0xFF], |b| xor_reg_reg(b, Register::R15, Register::R15));
     }
 
     #[test]
@@ -1072,5 +949,26 @@ mod tests {
         assert_enc(&[0x4C, 0x8D, 0x55, 0x10], |b| {
             lea_reg_mem(b, Register::R10, Register::Rbp, 16)
         });
+    }
+
+    #[test]
+    fn enc_ucomisd_reg_mem_sib() {
+        assert_enc(&[0x66, 0x0F, 0x2E, 0x44, 0xC8, 0xF0], |b| {
+            ucomisd_reg_mem_sib(b, Register::Xmm0, Register::Rax, Register::Rcx, Scale::X8, -16)
+        });
+        // REX.R
+        assert_enc(&[0x66, 0x44, 0x0F, 0x2E, 0x7C, 0xC8, 0xF0], |b| {
+            ucomisd_reg_mem_sib(b, Register::Xmm15, Register::Rax, Register::Rcx, Scale::X8, -16)
+        });
+    }
+
+    #[test]
+    fn enc_seta_reg() {
+        assert_enc(&[0x0F, 0x97, 0xC0], |b| seta_reg(b, Register::Al));
+        assert_enc(&[0x0F, 0x97, 0xC1], |b| seta_reg(b, Register::Cl));
+        assert_eq!(Register::R8.to_8(), Register::R8b);
+        assert_eq!(Register::Rcx.to_8(), Register::Cl);
+        assert_eq!(Register::Edx.to_8(), Register::Dl);
+        assert_enc(&[0x41, 0x0F, 0x97, 0xC0], |b| seta_reg(b, Register::R8.to_8()));
     }
 }
