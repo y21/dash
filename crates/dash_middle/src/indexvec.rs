@@ -1,7 +1,7 @@
 use core::slice;
 use std::alloc::{Layout, alloc, dealloc, handle_alloc_error, realloc};
 use std::fmt::Debug;
-use std::ops::SubAssign;
+use std::ops::{Range, SubAssign};
 use std::ptr::{self, NonNull};
 use std::{cmp, iter, mem, ops};
 
@@ -380,6 +380,16 @@ impl<T, I: Index> ops::Index<I> for IndexVec<T, I> {
 
     fn index(&self, index: I) -> &Self::Output {
         self.get(index).unwrap()
+    }
+}
+
+impl<T, I: Index> ops::Index<Range<I>> for IndexVec<T, I> {
+    type Output = [T];
+
+    fn index(&self, index: Range<I>) -> &Self::Output {
+        let start = unsafe { I::Repr::from_usize_unchecked(index.start.into_repr().usize()) };
+        let end = unsafe { I::Repr::from_usize_unchecked(index.end.into_repr().usize()) };
+        &self.as_slice()[start.usize()..end.usize()]
     }
 }
 

@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use dash_middle::compiler::FunctionCallKind;
 use dash_middle::compiler::instruction::AssignKind;
 use dash_middle::compiler::scope::BackLocalId;
@@ -131,6 +133,14 @@ pub enum GenericStmt {
 index_type! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub struct StmtId(pub u32);
+}
+
+impl Add<u32> for StmtId {
+    type Output = StmtId;
+
+    fn add(self, rhs: u32) -> Self::Output {
+        StmtId(self.0 + rhs)
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]

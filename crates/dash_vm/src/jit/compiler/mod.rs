@@ -1,31 +1,51 @@
 use std::mem::offset_of;
 
 use dash_middle::compiler::instruction::Instruction;
+use smallvec::SmallVec;
 
 use crate::Vm;
 use crate::frame::Ip;
 use crate::jit::compiler::backend::{
     PrologueData, REG_ARG1, REG_ARG2, REG_ARG3, REG_ARG4, REG_RETURN32, REG_RETURN64, REG_STACK_RELATIVE, Register,
-    Scale, addsd_reg_mem_sib, call_reg, cmp_reg_al_imm8, codegen_epilogue, codegen_prologue, decq_mem, je_block,
-    je_branch_target, je_synthetic_label, jmp_block, jmp_branch_target, jmp_synthetic_label, jne_block,
-    jne_synthetic_label, mov_mem_imm32, mov_mem_reg_scaled, mov_reg_imm32, mov_reg_mem, mov_reg_reg, movsd_mem_sib_reg,
-    movsd_reg_mem_sib, register_synthetic_block, register_user_block, seta_reg, test_reg_reg, ucomisd_reg_mem_sib,
-    usable_callee_saved_regs, usable_caller_saved_gprs, usable_fprs, xor_reg_reg,
+    Scale, addsd_reg_mem_sib, call_reg, cmp_reg_al_imm8, codegen_epilogue, codegen_prologue, decq_mem, incq_mem,
+    je_branch_target, jmp_block, jmp_branch_target, jmp_synthetic_label, jne_synthetic_label, mov_mem_imm32,
+    mov_mem_reg_scaled, mov_reg_imm32, mov_reg_mem, mov_reg_reg, movsd_mem_sib_reg, movsd_reg_mem_disp,
+    movsd_reg_mem_sib, orq_mem_reg, patch_sites_to, register_synthetic_block, register_user_block, seta_reg,
+    test_reg_reg, ucomisd_reg_mem_disp, ucomisd_reg_mem_sib, usable_callee_saved_regs, usable_caller_saved_gprs,
+    usable_fprs, xor_reg_reg,
 };
 use crate::jit::compiler::codebuffer::CodeBuffer;
-use crate::jit::compiler::jumpresolver::SyntheticLabel;
+use crate::jit::compiler::jumpresolver::{CpuIp, SyntheticLabel};
 use crate::jit::compiler::offsets::{VecOffsets, get_vec_offsets};
-use crate::jit::dataflow::DataflowEngine;
+use crate::jit::dataflow::{DataflowEngine, StmtOrTerminator};
 use crate::jit::ir::{BasicBlockId, Body, BranchTarget, GenericStmt, Stmt, Terminator, ValueSource};
 use crate::jit::mmap::MmapFn;
 use crate::jit::{JitOutData, JitVtable};
 use crate::localscope::LocalScope;
+use crate::value::Value;
 
 mod backend;
 mod codebuffer;
 mod jumpresolver;
 mod offsets;
 
+type Constants = Vec<(u64, SmallVec<[CpuIp; 1]>)>;
+
+#[derive(Debug, Copy, Clone)]
+struct StackLenRelative(i32);
+
+#[derive(Debug, Copy, Clone)]
+enum ResolvedValueSource {
+    Stack(StackLenRelative),
+    Float(f64),
+}
+
+#[derive(Debug, Copy, Clone)]
+enum LengthChange {
+    Dec,
+    None,
+    Inc,
+}
 struct CodegenCx<'a> {
     callee_regs: Vec<Register>,
     caller_regs: Vec<Register>,
@@ -37,6 +57,8 @@ struct CodegenCx<'a> {
     /// Start IP of the codegen region *relative to the full function's bytecode*.
     start: Ip,
     stack_vec_offsets: VecOffsets,
+    constants: Constants,
+    max_stack_depth: usize,
 }
 
 impl<'a> CodegenCx<'a> {
@@ -106,13 +128,36 @@ impl<'a> CodegenCx<'a> {
         stack_len_offset
     }
 
+    fn codegen_u64_rip_offset(&mut self, value: u64, patch_site: u32) {
+        if let Some((_, ips)) = self.constants.iter_mut().find(|&&mut (c, _)| c == value) {
+            ips.push(patch_site);
+        } else {
+            self.constants.push((value, smallvec::smallvec![patch_site]));
+        }
+    }
+
+    fn codegen_f64_rip_offset(&mut self, value: f64, patch_site: u32) {
+        self.codegen_u64_rip_offset(value.to_bits(), patch_site);
+    }
+
+    /// Registers an f64 constant and generates a memory load from the constant pool
+    fn codegen_ld_f64(&mut self, dest: Register, value: f64) {
+        let patch_site = movsd_reg_mem_disp(&mut self.buf, dest, Register::Rip, 0);
+
+        self.codegen_f64_rip_offset(value, patch_site);
+    }
+
     fn codegen_block(&mut self, block: BasicBlockId) {
         // If the user block has already been registered, we don't need to codegen again.
         if !register_user_block(&mut self.buf, block) {
             return;
         }
 
+        let mut cursor = self.dataflow.block_cursor(block);
         for stmt in self.body.blocks[block].stmts.iter_indices() {
+            let before_stmt_state = cursor.seek_to_before(self.body, StmtOrTerminator::Stmt(stmt));
+            self.max_stack_depth = self.max_stack_depth.max(before_stmt_state.stack.len());
+
             match self.body.blocks[block].stmts[stmt] {
                 Stmt::Generic(ref generic_stmt, ip) => match *generic_stmt {
                     GenericStmt::LdLocal(_) => self.codegen_handler_stub(Instruction::LdLocal, ip),
@@ -220,21 +265,6 @@ impl<'a> CodegenCx<'a> {
                 Stmt::UncheckedNumberAdd { lhs, rhs } => {
                     assert!(lhs == rhs && lhs == ValueSource::Stack); // for now, implementation is hardcoded to read from stack
 
-                    /*
-                    vm->stack[vm->stack.len - 2] = vm->stack[vm->stack.len - 2] + vm->stack[vm->stack.len - 1];
-                    vm->stack.len -= 1;
-
-                    movsxd  rax, dword ptr [rdi + 8]                ;; mov len into rax, could just be mov eax, dword ptr [rdi + 8] - dont need sign extension
-                    mov     rcx, qword ptr [rdi]                    ;; mov stack base into rcx
-
-                    movsd   xmm0, qword ptr [rcx + 8*rax - 16]      ;; store pointer to the 2nd-to-last element (equiv to stack[stack.len() - 2])
-                    addsd   xmm0, qword ptr [rcx + 8*rax - 8]       ;; add the top element (equiv to stack[stack.len() - 1]) to the 2nd-to-last element
-                    movsd   qword ptr [rcx + 8*rax - 16], xmm0      ;; mov the sum (xmm0) back into the 2nd-to-last element (equiv to stack[stack.len() - 2])
-                    dec     eax                                     ;; decrement the local stack length copy
-                    mov     dword ptr [rdi + 8], eax                ;; write the new length back
-                    ret
-
-                                 */
                     // stack offset on the VM: offset_of!(Vm, stack)
                     let len_reg = self.caller_gpr();
                     let stack_ptr_reg = self.caller_gpr();
@@ -285,8 +315,32 @@ impl<'a> CodegenCx<'a> {
                     self.add_caller_reg(len_reg);
                 }
                 Stmt::UncheckedNumberLt { lhs, rhs } => {
-                    assert_eq!(lhs, ValueSource::Stack);
-                    assert_eq!(rhs, ValueSource::Stack); // TODO: only stack implemented for now
+                    let (lhs, rhs, result_offset, len_change) = match (lhs, rhs) {
+                        (ValueSource::Float(lhs), ValueSource::Float(rhs)) => (
+                            ResolvedValueSource::Float(lhs),
+                            ResolvedValueSource::Float(rhs),
+                            -(size_of::<usize>() as i32),
+                            LengthChange::Inc,
+                        ),
+                        (ValueSource::Float(lhs), ValueSource::Stack) => (
+                            ResolvedValueSource::Float(lhs),
+                            ResolvedValueSource::Stack(StackLenRelative(-(size_of::<usize>() as i32))),
+                            -(size_of::<usize>() as i32),
+                            LengthChange::None,
+                        ),
+                        (ValueSource::Stack, ValueSource::Float(rhs)) => (
+                            ResolvedValueSource::Stack(StackLenRelative(-(size_of::<usize>() as i32))),
+                            ResolvedValueSource::Float(rhs),
+                            -(size_of::<usize>() as i32),
+                            LengthChange::None,
+                        ),
+                        (ValueSource::Stack, ValueSource::Stack) => (
+                            ResolvedValueSource::Stack(StackLenRelative(-(size_of::<usize>() as i32) * 2)),
+                            ResolvedValueSource::Stack(StackLenRelative(-(size_of::<usize>() as i32))),
+                            -(size_of::<usize>() as i32) * 2,
+                            LengthChange::Dec,
+                        ),
+                    };
 
                     let stack_ptr_reg = self.caller_gpr();
                     let len_reg = self.caller_gpr();
@@ -299,27 +353,44 @@ impl<'a> CodegenCx<'a> {
                     self.codegen_ld_stack_base(stack_ptr_reg);
                     let stack_len_offset = self.codegen_ld_stack_len(len_reg);
 
-                    movsd_reg_mem_sib(
-                        &mut self.buf,
-                        fpr,
-                        stack_ptr_reg,
-                        len_reg,
-                        Scale::target_pointer_with(),
-                        -i32::try_from(size_of::<usize>() * 1).unwrap(),
-                    );
+                    match rhs {
+                        ResolvedValueSource::Stack(StackLenRelative(stack_off)) => {
+                            movsd_reg_mem_sib(
+                                &mut self.buf,
+                                fpr,
+                                stack_ptr_reg,
+                                len_reg,
+                                Scale::target_pointer_with(),
+                                stack_off,
+                            );
+                        }
+                        ResolvedValueSource::Float(rhs) => {
+                            self.codegen_ld_f64(fpr, rhs);
+                        }
+                    }
 
                     xor_reg_reg(&mut self.buf, status32_reg, status32_reg);
 
-                    ucomisd_reg_mem_sib(
-                        &mut self.buf,
-                        fpr,
-                        stack_ptr_reg,
-                        len_reg,
-                        Scale::target_pointer_with(),
-                        -i32::try_from(size_of::<usize>() * 2).unwrap(),
-                    );
+                    match lhs {
+                        ResolvedValueSource::Stack(StackLenRelative(stack_off)) => {
+                            ucomisd_reg_mem_sib(
+                                &mut self.buf,
+                                fpr,
+                                stack_ptr_reg,
+                                len_reg,
+                                Scale::target_pointer_with(),
+                                stack_off,
+                            );
+                        }
+                        ResolvedValueSource::Float(lhs) => {
+                            let patch_site = ucomisd_reg_mem_disp(&mut self.buf, fpr, Register::Rip, 0);
+                            self.codegen_f64_rip_offset(lhs, patch_site);
+                        }
+                    }
 
                     seta_reg(&mut self.buf, status8_reg);
+                    let or_patch_site = orq_mem_reg(&mut self.buf, status_reg, Register::Rip, 0);
+                    self.codegen_u64_rip_offset(Value::BOOLEAN_MASK, or_patch_site);
 
                     mov_mem_reg_scaled(
                         &mut self.buf,
@@ -327,14 +398,26 @@ impl<'a> CodegenCx<'a> {
                         stack_ptr_reg,
                         len_reg,
                         Scale::target_pointer_with(),
-                        -i32::try_from(size_of::<usize>() * 2).unwrap(),
+                        result_offset,
                     );
 
-                    decq_mem(
-                        &mut self.buf,
-                        self.prologue.vm_csreg,
-                        stack_len_offset.try_into().unwrap(),
-                    );
+                    match len_change {
+                        LengthChange::Dec => {
+                            decq_mem(
+                                &mut self.buf,
+                                self.prologue.vm_csreg,
+                                stack_len_offset.try_into().unwrap(),
+                            );
+                        }
+                        LengthChange::Inc => {
+                            incq_mem(
+                                &mut self.buf,
+                                self.prologue.vm_csreg,
+                                stack_len_offset.try_into().unwrap(),
+                            );
+                        }
+                        LengthChange::None => {}
+                    }
 
                     self.add_fpr(fpr);
                     self.add_caller_reg(len_reg);
@@ -344,6 +427,8 @@ impl<'a> CodegenCx<'a> {
         }
 
         let terminator = self.body.blocks[block].terminator();
+        let before_terminator_state = cursor.seek_to_before(self.body, StmtOrTerminator::Terminator);
+        self.max_stack_depth = self.max_stack_depth.max(before_terminator_state.stack.len());
         match *terminator {
             Terminator::Goto(target) => match target {
                 BranchTarget::Block(target) => {
@@ -386,6 +471,9 @@ impl<'a> CodegenCx<'a> {
             }
         }
 
+        let after_terminator_state = cursor.seek_to_before(self.body, StmtOrTerminator::PostTerminator);
+        self.max_stack_depth = self.max_stack_depth.max(after_terminator_state.stack.len());
+
         // NB: at this point, we've generated code for the successor blocks, so don't do anything block-specific here.
     }
 
@@ -394,7 +482,30 @@ impl<'a> CodegenCx<'a> {
     }
 }
 
-pub fn compile(body: &Body, start_ip: Ip, end_ip: Ip, dataflow: &DataflowEngine, scope: &LocalScope<'_>) -> MmapFn {
+/// Merges the machine code buffer with the constants, appending them at the end and patching the relative offsets to them.
+fn patch_constant_loads(mut buf: CodeBuffer, mut constants: Constants) -> Vec<u8> {
+    for (constant, patch_sites) in &mut constants {
+        let offset = buf.offset();
+        buf.extend_from_slice(&constant.to_ne_bytes());
+
+        patch_sites_to(&mut buf, patch_sites, offset);
+    }
+
+    buf.buffer
+}
+
+pub struct CompileResult {
+    pub func: MmapFn,
+    pub max_stack_depth: usize,
+}
+
+pub fn compile(
+    body: &Body,
+    start_ip: Ip,
+    end_ip: Ip,
+    dataflow: &DataflowEngine,
+    scope: &LocalScope<'_>,
+) -> CompileResult {
     let mut buf = CodeBuffer::new(body);
     let mut callee_regs = usable_callee_saved_regs();
     let caller_regs = usable_caller_saved_gprs();
@@ -412,6 +523,8 @@ pub fn compile(body: &Body, start_ip: Ip, end_ip: Ip, dataflow: &DataflowEngine,
         prologue,
         start: start_ip,
         stack_vec_offsets: get_vec_offsets(&scope.stack),
+        constants: Constants::new(),
+        max_stack_depth: 0,
     };
 
     cx.codegen_body();
@@ -444,7 +557,10 @@ pub fn compile(body: &Body, start_ip: Ip, end_ip: Ip, dataflow: &DataflowEngine,
 
     cx.buf.jumps.assert_resolved();
 
-    std::fs::write("/tmp/dash_jit_out.bin", cx.buf.buffer()).unwrap();
+    // TODO: do this in the same fn as assert_resolved? move this stuff to the JumpResolver?
+    let buffer = patch_constant_loads(cx.buf, cx.constants);
+
+    std::fs::write("/tmp/dash_jit_out.bin", &buffer).unwrap();
     println!("------- Start of x86 blob -------");
     std::process::Command::new("objdump")
         .args(&["-D", "-b", "binary", "-m", "i386:x86-64", "/tmp/dash_jit_out.bin"])
@@ -452,5 +568,8 @@ pub fn compile(body: &Body, start_ip: Ip, end_ip: Ip, dataflow: &DataflowEngine,
         .unwrap();
     println!("------- End of x86 blob -------");
 
-    MmapFn::alloc(cx.buf.buffer())
+    CompileResult {
+        func: MmapFn::alloc(&buffer),
+        max_stack_depth: cx.max_stack_depth,
+    }
 }

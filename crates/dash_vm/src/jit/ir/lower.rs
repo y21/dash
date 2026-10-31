@@ -22,7 +22,7 @@ use rustc_hash::FxHashMap;
 use crate::frame::Ip;
 use crate::jit::ir::{
     BasicBlock, BasicBlockId, Body, BranchTarget, ConditionalGotoCondition, ConditionalGotoPopPolicy, GenericStmt,
-    Stmt, Terminator,
+    Stmt, Terminator, ValueSource,
 };
 use crate::jit::{BufferRef, NoValueExtractContext};
 use crate::localscope::LocalScope;
@@ -93,7 +93,10 @@ fn lower_from_ip(
             }
             InstructionOperands::IntrinsicOp(IntrinsicOperands(kind)) => match kind {
                 IntrinsicKind::LtNumLConstR32((), NumberInline32(num)) => {
-                    stmts.push(Stmt::Generic(GenericStmt::LtNumLConstR32(num), instr_ip));
+                    stmts.push(Stmt::UncheckedNumberLt {
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Float(num),
+                    });
                 }
                 IntrinsicKind::PostfixIncLocalNum(local) => {
                     stmts.push(Stmt::Generic(GenericStmt::PostfixIncLocalNum(local), instr_ip));

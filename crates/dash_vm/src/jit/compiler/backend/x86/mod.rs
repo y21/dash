@@ -1,6 +1,7 @@
 mod modrm {
     pub const MOD_R: u8 = 0b11_000_000;
     pub const MOD_M8: u8 = 0b01_000_000;
+    pub const MOD_M32_RIP: u8 = 0b00_000_000;
     pub const MOD_M8_SIB: u8 = 0b01_000_100;
 }
 
@@ -35,24 +36,23 @@ mod opcodes {
     pub const ADDSD_REG_RM: &[u8] = &[0x0F, 0x58];
     pub const MOVSD_RM_REG: &[u8] = &[0x0F, 0x11];
     pub const UCOMISD_REG_RM: &[u8] = &[0x0F, 0x2E];
-    pub const DEC_RM64: u8 = 0xFF;
+    pub const DEC_INC_RM64: u8 = 0xFF;
     pub const CALL_RM64: u8 = 0xFF;
     pub const XOR: u8 = 0x31;
     pub const SETA_RM8: &[u8] = &[0x0F, 0x97];
+    pub const OR_R_RM: u8 = 0x0B;
 }
 
 use std::mem::offset_of;
 use std::ops::BitOrAssign;
 
 use arrayvec::ArrayVec;
-use dash_middle::indexvec::IndexVec;
 
-use crate::frame::Ip;
 use crate::jit::JitVtable;
 use crate::jit::compiler::backend::x86::register::Register;
 use crate::jit::compiler::codebuffer::CodeBuffer;
 use crate::jit::compiler::jumpresolver::{CpuIp, PatchData, SyntheticLabel};
-use crate::jit::ir::{BasicBlockId, Body};
+use crate::jit::ir::BasicBlockId;
 
 pub mod register;
 
@@ -147,16 +147,16 @@ pub fn push(buf: &mut CodeBuffer, reg: Register) {
     if reg.needs_rex_prefix() {
         buf.push(rex::BASE | rex::B);
     }
-    buf.push(opcodes::PUSH_REG + reg.fields());
+    buf.push(opcodes::PUSH_REG + reg.register_field());
 }
 
 /// Encodes `mov <dest reg>, [<base reg> + <offset imm8>]`
-pub fn mov_reg_mem(buf: &mut CodeBuffer, dest: Register, base: Register, offset: i32) {
+pub fn mov_reg_mem(buf: &mut CodeBuffer, dest: Register, base: Register, offset: i32) -> CpuIp {
     let mut encoding = encode_modrm_reg_mem(RegField::Reg(dest), Mem::RegDispImm(base, offset));
     if dest.size_bits() == 64 {
         encoding.rex |= Rex::W;
     }
-    encoding.write_into(buf, &[opcodes::MOV_R_RM]);
+    encoding.write_into(buf, &[opcodes::MOV_R_RM])
 }
 
 pub enum Scale {
@@ -203,7 +203,8 @@ struct ModrmEncoding {
 }
 
 impl ModrmEncoding {
-    fn write_into(self, buf: &mut CodeBuffer, opcode: &[u8]) {
+    /// Returns the position of the displacement.
+    fn write_into(self, buf: &mut CodeBuffer, opcode: &[u8]) -> CpuIp {
         assert!((self.rex.0 & Rex::BASE.0) == Rex::BASE.0);
 
         if self.rex != Rex::BASE {
@@ -214,7 +215,9 @@ impl ModrmEncoding {
         if let Some(sib) = self.sib {
             buf.push(sib);
         }
+        let ip = buf.offset();
         buf.extend_from_slice(&self.displacement);
+        ip
     }
 }
 
@@ -224,7 +227,7 @@ enum RegField {
 }
 
 fn build_sib(scale: Scale, index: Option<Register>, base: Register) -> u8 {
-    (scale as u8) << 6 | (index.map_or(0b100, |r| r.fields()) << 3) | base.fields()
+    (scale as u8) << 6 | (index.map_or(0b100, |r| r.register_field()) << 3) | base.register_field()
 }
 
 fn encode_modrm_reg_reg(reg: RegField, rm: Register) -> ModrmEncoding {
@@ -235,7 +238,7 @@ fn encode_modrm_reg_reg(reg: RegField, rm: Register) -> ModrmEncoding {
             if register.needs_rex_prefix() {
                 rex |= Rex::R;
             }
-            register.fields()
+            register.register_field()
         }
         RegField::Bits(bits) => bits,
     };
@@ -274,7 +277,7 @@ fn encode_modrm_reg_mem(reg: RegField, rm: Mem) -> ModrmEncoding {
             if register.needs_rex_prefix() {
                 rex |= Rex::R;
             }
-            modrm |= register.fields() << 3;
+            modrm |= register.register_field() << 3;
         }
         RegField::Bits(bits) => modrm |= bits << 3,
     }
@@ -285,7 +288,14 @@ fn encode_modrm_reg_mem(reg: RegField, rm: Mem) -> ModrmEncoding {
                 rex |= Rex::B;
             }
 
-            if let Ok(imm) = i8::try_from(imm) {
+            if let Register::Rip = reg {
+                // RIP register is special cased and only supports 32-bit displacement
+                let rm = reg.rm_field();
+                modrm |= modrm::MOD_M32_RIP | rm;
+                let disp = ArrayVec::from(imm.to_le_bytes());
+
+                (None, disp)
+            } else if let Ok(imm) = i8::try_from(imm) {
                 let rm = reg.rm_field();
                 modrm |= modrm::MOD_M8 | rm;
 
@@ -313,6 +323,8 @@ fn encode_modrm_reg_mem(reg: RegField, rm: Mem) -> ModrmEncoding {
                 rex |= Rex::X;
             }
 
+            assert!(base != Register::Rip, "RIP cannot be used as base in SIB addressing");
+            assert!(index != Register::Rip, "RIP cannot be used as index in SIB addressing");
             if let Ok(offset) = i8::try_from(offset) {
                 let sib = build_sib(scale, Some(index), base);
                 modrm |= modrm::MOD_M8_SIB | Register::RM_FIELD_NEEDS_SIB;
@@ -331,6 +343,15 @@ fn encode_modrm_reg_mem(reg: RegField, rm: Mem) -> ModrmEncoding {
         sib,
         displacement,
     }
+}
+
+/// Encodes `movsd <dest reg>, [<base reg> + <offset imm>]`
+pub fn movsd_reg_mem_disp(buf: &mut CodeBuffer, dest: Register, base: Register, offset: i32) -> CpuIp {
+    buf.push(0xf2);
+
+    let encoding = encode_modrm_reg_mem(RegField::Reg(dest), Mem::RegDispImm(base, offset));
+
+    encoding.write_into(buf, opcodes::MOVSD_REG_RM)
 }
 
 /// Encodes `movsd <dest reg>, [<base reg> + <index reg> * <scale> + <offset imm>]` (SIB addressing)
@@ -365,7 +386,7 @@ pub fn ucomisd_reg_mem_sib(
     index: Register,
     scale: Scale,
     offset: i32,
-) {
+) -> CpuIp {
     buf.push(0x66);
 
     let encoding = encode_modrm_reg_mem(
@@ -378,7 +399,15 @@ pub fn ucomisd_reg_mem_sib(
         },
     );
 
-    encoding.write_into(buf, opcodes::UCOMISD_REG_RM);
+    encoding.write_into(buf, opcodes::UCOMISD_REG_RM)
+}
+
+pub fn ucomisd_reg_mem_disp(buf: &mut CodeBuffer, lhs: Register, base: Register, displacement: i32) -> CpuIp {
+    buf.push(0x66);
+
+    let encoding = encode_modrm_reg_mem(RegField::Reg(lhs), Mem::RegDispImm(base, displacement));
+
+    encoding.write_into(buf, opcodes::UCOMISD_REG_RM)
 }
 
 /// Encodes `xor <dest reg>, <src reg>` instruction
@@ -447,7 +476,14 @@ pub fn movsd_mem_sib_reg(
 pub fn decq_mem(buf: &mut CodeBuffer, reg: Register, offset: i32) {
     let mut encoding = encode_modrm_reg_mem(RegField::Bits(1), Mem::RegDispImm(reg, offset));
     encoding.rex |= Rex::W;
-    encoding.write_into(buf, &[opcodes::DEC_RM64]);
+    encoding.write_into(buf, &[opcodes::DEC_INC_RM64]);
+}
+
+/// Encodes `incq <mem u8>` instruction
+pub fn incq_mem(buf: &mut CodeBuffer, reg: Register, offset: i32) {
+    let mut encoding = encode_modrm_reg_mem(RegField::Bits(0), Mem::RegDispImm(reg, offset));
+    encoding.rex |= Rex::W;
+    encoding.write_into(buf, &[opcodes::DEC_INC_RM64]);
 }
 
 /// Encodes `dec <reg>` instruction
@@ -456,14 +492,22 @@ pub fn dec_reg(buf: &mut CodeBuffer, reg: Register) {
     if reg.size_bits() == 64 {
         encoding.rex |= Rex::W;
     }
-    encoding.write_into(buf, &[opcodes::DEC_RM64]);
+    encoding.write_into(buf, &[opcodes::DEC_INC_RM64]);
+}
+
+pub fn incq_reg(buf: &mut CodeBuffer, reg: Register) {
+    let mut encoding = encode_modrm_reg_reg(RegField::Bits(0), reg);
+    if reg.size_bits() == 64 {
+        encoding.rex |= Rex::W;
+    }
+    encoding.write_into(buf, &[opcodes::DEC_INC_RM64]);
 }
 
 pub fn mov_reg_imm32(buf: &mut CodeBuffer, reg: Register, imm: u32) {
     if reg.needs_rex_prefix() {
         buf.push(rex::BASE | rex::B);
     }
-    buf.push(opcodes::MOV_REG_IMM32 + reg.fields());
+    buf.push(opcodes::MOV_REG_IMM32 + reg.register_field());
     buf.extend_from_slice(&imm.to_le_bytes());
 }
 
@@ -479,6 +523,12 @@ pub fn test_reg_reg(buf: &mut CodeBuffer, reg1: Register, reg2: Register) {
     encoding.write_into(buf, &[opcodes::TEST_R_R]);
 }
 
+pub fn orq_mem_reg(buf: &mut CodeBuffer, reg: Register, base: Register, offset: i32) -> CpuIp {
+    let mut encoding = encode_modrm_reg_mem(RegField::Reg(reg), Mem::RegDispImm(base, offset));
+    encoding.rex |= Rex::W;
+    encoding.write_into(buf, &[opcodes::OR_R_RM])
+}
+
 pub fn mov_mem_imm32(buf: &mut CodeBuffer, base: Register, offset: i32, imm: i32) {
     encode_modrm_reg_mem(RegField::Bits(0), Mem::RegDispImm(base, offset)).write_into(buf, &[opcodes::MOV_MEM_IMM32]);
     buf.extend_from_slice(&imm.to_le_bytes());
@@ -492,7 +542,7 @@ pub fn pop(buf: &mut CodeBuffer, reg: Register) {
     if reg.needs_rex_prefix() {
         buf.push(rex::BASE | rex::B);
     }
-    buf.push(opcodes::POP_REG + reg.fields());
+    buf.push(opcodes::POP_REG + reg.register_field());
 }
 
 pub fn add_rsp_imm8(buf: &mut CodeBuffer, imm: u8) {
@@ -502,7 +552,6 @@ pub fn add_rsp_imm8(buf: &mut CodeBuffer, imm: u8) {
     buf.push(imm as u8);
 }
 
-#[expect(dead_code)]
 pub fn sub_rsp_imm8(buf: &mut CodeBuffer, imm: u8) {
     let mut encoding = encode_modrm_reg_reg(RegField::Bits(5), Register::Rsp);
     encoding.rex |= Rex::W;
@@ -588,15 +637,15 @@ pub fn lea_reg_mem(buf: &mut CodeBuffer, dest: Register, base: Register, offset:
     encoding.write_into(buf, &[opcodes::LEA]);
 }
 
-fn patch_rel32(buf: &mut CodeBuffer, patch_site: CpuIp, target: CpuIp) {
+pub fn patch_rel32(buf: &mut CodeBuffer, patch_site: CpuIp, target: CpuIp) {
     let patch_site = patch_site as usize;
     let disp = target as i64 - (patch_site as i64 + 4);
     let disp = i32::try_from(disp).expect("rel32 displacement out of range");
     buf.buffer[patch_site..patch_site + 4].copy_from_slice(&disp.to_le_bytes());
 }
 
-fn patch_sites_to(buf: &mut CodeBuffer, patch_sites: Vec<CpuIp>, target: CpuIp) {
-    for patch_site in patch_sites {
+pub fn patch_sites_to(buf: &mut CodeBuffer, patch_sites: &[CpuIp], target: CpuIp) {
+    for &patch_site in patch_sites {
         patch_rel32(buf, patch_site, target);
     }
 }
@@ -605,7 +654,7 @@ pub fn register_user_block(buf: &mut CodeBuffer, block: BasicBlockId) -> bool {
     let x86_ip = buf.offset();
     match buf.jumps.register_user_label(block, x86_ip) {
         PatchData::Unresolved { references } => {
-            patch_sites_to(buf, references, x86_ip);
+            patch_sites_to(buf, &references, x86_ip);
             true
         }
         PatchData::Resolved { ip: _ } => false,
@@ -616,7 +665,7 @@ pub fn register_synthetic_block(buf: &mut CodeBuffer, label: SyntheticLabel) -> 
     let x86_ip = buf.offset();
     match buf.jumps.register_synthetic_label(label, x86_ip) {
         PatchData::Unresolved { references } => {
-            patch_sites_to(buf, references, x86_ip);
+            patch_sites_to(buf, &references, x86_ip);
             true
         }
         PatchData::Resolved { ip: _ } => false,
@@ -625,6 +674,8 @@ pub fn register_synthetic_block(buf: &mut CodeBuffer, label: SyntheticLabel) -> 
 
 #[cfg(test)]
 mod tests {
+    use crate::jit::ir::Body;
+
     use super::*;
 
     fn make_buf() -> CodeBuffer {
@@ -638,7 +689,12 @@ mod tests {
     fn assert_enc(expected: &[u8], emit: impl FnOnce(&mut CodeBuffer)) {
         let mut buf = make_buf();
         emit(&mut buf);
-        assert_eq!(buf.buffer(), expected, "expected {expected:02x?}");
+        assert_eq!(
+            buf.buffer(),
+            expected,
+            "expected {expected:02x?}, got {:02x?}",
+            buf.buffer()
+        );
     }
 
     #[test]
@@ -670,30 +726,30 @@ mod tests {
     fn enc_mov_reg_mem() {
         // [rbp - 16]: mod=01, rm=101, disp8
         assert_enc(&[0x48, 0x8B, 0x45, 0xF0], |b| {
-            mov_reg_mem(b, Register::Rax, Register::Rbp, -16)
+            mov_reg_mem(b, Register::Rax, Register::Rbp, -16);
         });
         assert_enc(&[0x48, 0x8B, 0x45, 0x08], |b| {
-            mov_reg_mem(b, Register::Rax, Register::Rbp, 8)
+            mov_reg_mem(b, Register::Rax, Register::Rbp, 8);
         });
         // 32-bit dest: no W
         assert_enc(&[0x8B, 0x45, 0xF8], |b| {
-            mov_reg_mem(b, Register::Eax, Register::Rbp, -8)
+            mov_reg_mem(b, Register::Eax, Register::Rbp, -8);
         });
         // [rsp]: rm=100 forces a SIB byte with no index
         assert_enc(&[0x48, 0x8B, 0x44, 0x24, 0x00], |b| {
-            mov_reg_mem(b, Register::Rax, Register::Rsp, 0)
+            mov_reg_mem(b, Register::Rax, Register::Rsp, 0);
         });
         // [r12]: SIB + REX.B
         assert_enc(&[0x4D, 0x8B, 0x54, 0x24, 0x08], |b| {
-            mov_reg_mem(b, Register::R10, Register::R12, 8)
+            mov_reg_mem(b, Register::R10, Register::R12, 8);
         });
         // [r13]: rm=101 with mod=01 is plain disp8, no SIB needed; REX.B only
         assert_enc(&[0x49, 0x8B, 0x45, 0xF0], |b| {
-            mov_reg_mem(b, Register::Rax, Register::R13, -16)
+            mov_reg_mem(b, Register::Rax, Register::R13, -16);
         });
         // REX.W with rdi/rsi
         assert_enc(&[0x48, 0x8B, 0x7E, 0x04], |b| {
-            mov_reg_mem(b, Register::Rdi, Register::Rsi, 4)
+            mov_reg_mem(b, Register::Rdi, Register::Rsi, 4);
         });
     }
 
@@ -757,6 +813,17 @@ mod tests {
     }
 
     #[test]
+    fn enc_incq_mem() {
+        // REX.W FF /0, [rbp - 8]
+        assert_enc(&[0x48, 0xFF, 0x45, 0xF8], |b| incq_mem(b, Register::Rbp, -8));
+        // [r12]: SIB + REX.WB
+        assert_enc(&[0x49, 0xFF, 0x44, 0x24, 0xf0], |b| incq_mem(b, Register::R12, -16));
+        // [r13]: REX.WB, disp8
+        assert_enc(&[0x49, 0xFF, 0x45, 0x04], |b| incq_mem(b, Register::R13, 4));
+        assert_enc(&[0x48, 0xFF, 0x40, 0x00], |b| incq_mem(b, Register::Rax, 0));
+    }
+
+    #[test]
     fn enc_dec_reg() {
         assert_enc(&[0x48, 0xFF, 0xC8], |b| dec_reg(b, Register::Rax));
         // REX.WB
@@ -765,6 +832,17 @@ mod tests {
         assert_enc(&[0x49, 0xFF, 0xCF], |b| dec_reg(b, Register::R15));
         // 32-bit: no W, REX suppressed
         assert_enc(&[0xFF, 0xC8], |b| dec_reg(b, Register::Eax));
+    }
+
+    #[test]
+    fn enc_incq_reg() {
+        assert_enc(&[0x48, 0xFF, 0xC0], |b| incq_reg(b, Register::Rax));
+        // REX.WB
+        assert_enc(&[0x49, 0xFF, 0xC2], |b| incq_reg(b, Register::R10));
+        assert_enc(&[0x49, 0xFF, 0xC5], |b| incq_reg(b, Register::R13));
+        assert_enc(&[0x49, 0xFF, 0xC7], |b| incq_reg(b, Register::R15));
+        // 32-bit: no W, REX suppressed
+        assert_enc(&[0xFF, 0xC0], |b| incq_reg(b, Register::Eax));
     }
 
     #[test]
@@ -954,11 +1032,31 @@ mod tests {
     #[test]
     fn enc_ucomisd_reg_mem_sib() {
         assert_enc(&[0x66, 0x0F, 0x2E, 0x44, 0xC8, 0xF0], |b| {
-            ucomisd_reg_mem_sib(b, Register::Xmm0, Register::Rax, Register::Rcx, Scale::X8, -16)
+            ucomisd_reg_mem_sib(b, Register::Xmm0, Register::Rax, Register::Rcx, Scale::X8, -16);
         });
         // REX.R
         assert_enc(&[0x66, 0x44, 0x0F, 0x2E, 0x7C, 0xC8, 0xF0], |b| {
-            ucomisd_reg_mem_sib(b, Register::Xmm15, Register::Rax, Register::Rcx, Scale::X8, -16)
+            ucomisd_reg_mem_sib(b, Register::Xmm15, Register::Rax, Register::Rcx, Scale::X8, -16);
+        });
+    }
+
+    #[test]
+    fn enc_orq_mem_reg() {
+        // REX.W, [rbp - 16]
+        assert_enc(&[0x48, 0x0B, 0x4D, 0xF0], |b| {
+            orq_mem_reg(b, Register::Rcx, Register::Rbp, -16);
+        });
+        // REX.WR: source register is r10
+        assert_enc(&[0x4C, 0x0B, 0x55, 0x08], |b| {
+            orq_mem_reg(b, Register::R10, Register::Rbp, 8);
+        });
+        // REX.WB + SIB for [r12]
+        assert_enc(&[0x49, 0x0B, 0x54, 0x24, 0x00], |b| {
+            orq_mem_reg(b, Register::Rdx, Register::R12, 0);
+        });
+        // REX.WRB for an extended register and base
+        assert_enc(&[0x4D, 0x0B, 0x7D, 0xF8], |b| {
+            orq_mem_reg(b, Register::R15, Register::R13, -8);
         });
     }
 

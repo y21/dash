@@ -101,45 +101,13 @@ pub enum Register {
     Xmm13,
     Xmm14,
     Xmm15,
+
+    Rip,
 }
 
 impl Register {
     pub fn size_bits(self) -> u32 {
         match self {
-            // Register::Rax
-            // | Register::R8
-            // | Register::Rbp
-            // | Register::R12
-            // | Register::R13
-            // | Register::Rsp
-            // | Register::Rdi
-            // | Register::Rsi
-            // | Register::R14
-            // | Register::R15
-            // | Register::Rdx
-            // | Register::Rcx
-            // | Register::Rbx
-            // | Register::R9
-            // | Register::R10
-            // | Register::R11
-            // | Register::Xmm0
-            // | Register::Xmm1
-            // | Register::Xmm2
-            // | Register::Xmm3
-            // | Register::Xmm4
-            // | Register::Xmm5
-            // | Register::Xmm6
-            // | Register::Xmm7
-            // | Register::Xmm8
-            // | Register::Xmm9
-            // | Register::Xmm10
-            // | Register::Xmm11
-            // | Register::Xmm12
-            // | Register::Xmm13
-            // | Register::Xmm14
-            // | Register::Xmm15 => 64,
-            // Register::Eax => 32,
-            // Register::Al => 8,
             Register::Al
             | Register::Bl
             | Register::Cl
@@ -210,7 +178,8 @@ impl Register {
             | Register::R12
             | Register::R13
             | Register::R14
-            | Register::R15 => 64,
+            | Register::R15
+            | Register::Rip => 64,
 
             Register::Xmm0
             | Register::Xmm1
@@ -244,7 +213,7 @@ impl Register {
     }
 
     /// Returns the register field and a boolean indicating if it requires a REX prefix.
-    pub fn fields(self) -> u8 {
+    pub fn register_field(self) -> u8 {
         match self {
             Register::Al | Register::Ax | Register::Eax | Register::Rax | Register::Xmm0 => 0,
             Register::Cl | Register::Cx | Register::Ecx | Register::Rcx | Register::Xmm1 => 1,
@@ -263,6 +232,8 @@ impl Register {
             Register::R13b | Register::R13w | Register::R13d | Register::R13 | Register::Xmm13 => 5,
             Register::R14b | Register::R14w | Register::R14d | Register::R14 | Register::Xmm14 => 6,
             Register::R15b | Register::R15w | Register::R15d | Register::R15 | Register::Xmm15 => 7,
+
+            Register::Rip => panic!("cannot get register field for rip"),
         }
     }
 
@@ -276,7 +247,7 @@ impl Register {
             Register::Ah | Register::Spl | Register::Sp | Register::Esp | Register::Rsp | Register::Xmm4 |
             Register::Ch | Register::Bpl | Register::Bp | Register::Ebp | Register::Rbp | Register::Xmm5 |
             Register::Dh | Register::Sil | Register::Si | Register::Esi | Register::Rsi | Register::Xmm6 |
-            Register::Bh | Register::Dil | Register::Di | Register::Edi | Register::Rdi | Register::Xmm7 => false,
+            Register::Bh | Register::Dil | Register::Di | Register::Edi | Register::Rdi | Register::Xmm7 | Register::Rip => false,
 
             Register::R8b | Register::R8w | Register::R8d | Register::R8 | Register::Xmm8 |
             Register::R9b | Register::R9w | Register::R9d | Register::R9 | Register::Xmm9 |
@@ -353,7 +324,8 @@ impl Register {
             | Register::R13b
             | Register::R13w
             | Register::R13d
-            | Register::Xmm13 => 0b101,
+            | Register::Xmm13
+            | Register::Rip => 0b101,
             Register::Dh
             | Register::Sil
             | Register::Si

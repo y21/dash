@@ -1,3 +1,6 @@
+use std::cmp::Ordering;
+use std::iter;
+
 use dash_middle::compiler::FunctionCallKind;
 use dash_middle::compiler::instruction::AssignKind;
 use dash_middle::compiler::scope::BackLocalId;
@@ -82,7 +85,7 @@ impl DataflowEngine {
         DataflowBlockCursor {
             state,
             block,
-            stmt: StmtId(0),
+            pos: StmtOrTerminator::Stmt(StmtId(0)),
         }
     }
 
@@ -125,6 +128,8 @@ impl DataflowEngine {
                         self.entry_states[block] = Some(state.clone());
                         queue.push(block);
                     }
+                } else {
+                    assert!(state.stack.is_empty());
                 }
             });
         }
@@ -459,37 +464,88 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd)]
+pub enum StmtOrTerminator {
+    /// Positioned before the given `StmtId`
+    Stmt(StmtId),
+    /// Position before the terminator
+    Terminator,
+    /// Positioned after the terminator
+    PostTerminator,
+}
+
+impl Ord for StmtOrTerminator {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (StmtOrTerminator::Stmt(a), StmtOrTerminator::Stmt(b)) => a.cmp(b),
+            (StmtOrTerminator::Terminator, StmtOrTerminator::Terminator)
+            | (StmtOrTerminator::PostTerminator, StmtOrTerminator::PostTerminator) => Ordering::Equal,
+            (StmtOrTerminator::Stmt(_), StmtOrTerminator::Terminator | StmtOrTerminator::PostTerminator) => {
+                Ordering::Less
+            }
+            (StmtOrTerminator::Terminator | StmtOrTerminator::PostTerminator, StmtOrTerminator::Stmt(_)) => {
+                Ordering::Greater
+            }
+            (StmtOrTerminator::Terminator, StmtOrTerminator::PostTerminator) => Ordering::Less,
+            (StmtOrTerminator::PostTerminator, StmtOrTerminator::Terminator) => Ordering::Greater,
+        }
+    }
+}
+
+impl StmtOrTerminator {
+    pub fn next(self, block: BasicBlockId, body: &Body) -> Option<Self> {
+        match self {
+            StmtOrTerminator::Stmt(stmt_id) => {
+                let next = stmt_id + 1;
+                if next.0 == body.blocks[block].stmts.len() {
+                    Some(StmtOrTerminator::Terminator)
+                } else {
+                    Some(StmtOrTerminator::Stmt(next))
+                }
+            }
+            StmtOrTerminator::Terminator => Some(StmtOrTerminator::PostTerminator),
+            StmtOrTerminator::PostTerminator => None,
+        }
+    }
+}
+
 pub struct DataflowBlockCursor {
-    stmt: StmtId,
+    pos: StmtOrTerminator,
     state: BlockState,
     block: BasicBlockId,
 }
 
 impl DataflowBlockCursor {
-    pub fn seek_to_before_stmt(&mut self, body: &Body, stmt: StmtId) -> &BlockState {
-        if self.stmt == stmt {
-            &self.state
-        } else if stmt > self.stmt {
-            self.rerun_from_to(body, self.stmt, stmt, false);
-            &self.state
-        } else {
-            unimplemented!("Backward seeking not implemented yet")
+    pub fn seek_to_before(&mut self, body: &Body, to: StmtOrTerminator) -> &BlockState {
+        match self.pos.cmp(&to) {
+            Ordering::Less | Ordering::Equal => {
+                self.rerun_from_to(body, self.pos, to);
+                &self.state
+            }
+            Ordering::Greater => {
+                unimplemented!("Forward seeking not implemented yet")
+            }
         }
     }
 
-    fn rerun_from_to(&mut self, body: &Body, from: StmtId, to: StmtId, inclusive: bool) {
-        let stmts = body.blocks[self.block].stmts.as_slice();
+    fn rerun_from_to(&mut self, body: &Body, from: StmtOrTerminator, to: StmtOrTerminator) {
+        use StmtOrTerminator::{Stmt, Terminator};
+        assert!(to >= from);
 
-        let end = match inclusive {
-            true => StmtId(to.0 + 1),
-            false => to,
-        };
+        let iter = iter::successors(Some(from), |pos| pos.next(self.block, body)).take_while(|&stmt| stmt != to);
 
-        for stmt in &stmts[(from.0 as usize)..(end.0 as usize)] {
-            apply_stmt(&mut self.state, stmt);
+        let block = &body.blocks[self.block];
+        for pos in iter {
+            match pos {
+                Stmt(stmt_id) => apply_stmt(&mut self.state, &block.stmts[stmt_id]),
+                Terminator => {
+                    apply_terminator(&mut self.state, block.terminator());
+                }
+                StmtOrTerminator::PostTerminator => {}
+            }
         }
 
-        self.stmt = end;
+        self.pos = to;
     }
 }
 

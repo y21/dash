@@ -5,6 +5,7 @@ use std::rc::Rc;
 use crate::Vm;
 use crate::dispatch::{DispatchContext, INSTRUCTION_LUT};
 use crate::frame::Ip;
+use crate::jit::compiler::CompileResult;
 use crate::jit::ir::{ConditionalGotoCondition, ConditionalGotoPopPolicy};
 use crate::jit::mmap::MmapFn;
 use crate::localscope::LocalScope;
@@ -28,15 +29,29 @@ pub use state::State;
 pub enum CompileError {}
 
 #[derive(Debug)]
-pub struct JitFnHandle(Rc<MmapFn>);
+struct InnerJitFnHandle {
+    func: MmapFn,
+    max_stack_depth: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct JitFnHandle(Rc<InnerJitFnHandle>);
 
 impl JitFnHandle {
+    fn reserve_max_stack_depth(&self, vm: &mut Vm) {
+        let len = vm.stack.len();
+        vm.stack.reserve(len + self.0.max_stack_depth);
+    }
+
     pub fn call(&self, vm: &mut Vm) -> JitReturn {
+        self.reserve_max_stack_depth(vm);
+
         let mut out = MaybeUninit::<JitOutData>::zeroed();
 
         let previously_in_jit = vm.frames.replace_in_jit(true);
         let ret = self
             .0
+            .func
             .call3::<&mut Vm, &JitVtable, &mut MaybeUninit<JitOutData>, InternalJitReturn>(vm, &JIT_VTABLE, &mut out);
         vm.frames.replace_in_jit(previously_in_jit);
 
@@ -106,13 +121,6 @@ extern "C" fn handler_stub(vm: &mut Vm, _: *mut JitOutData, handler: u8, ip: u32
     }
 }
 
-#[repr(u8)]
-enum CheckCondition {
-    Truthy,
-    Nullish,
-    Undefined,
-}
-
 #[repr(C)]
 struct JitVtable {
     stub_fn: extern "C" fn(&mut Vm, *mut JitOutData, u8, u32) -> HandlerStubReturn,
@@ -152,9 +160,9 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Re
     let key = (current_fn, start);
 
     if let Some(func) = scope.jit.compiled_fn_cache.get(&key) {
-        Ok(JitFnHandle(Rc::clone(func)))
+        Ok(func.clone())
     } else {
-        let func = Rc::new(scope.frames.with_current_bytecode(|bytecode| {
+        let handle = scope.frames.with_current_bytecode(|bytecode| {
             let bytecode = &bytecode[start.0 as usize..end.0 as usize];
             let bytecode = BufferRef::from(bytecode);
 
@@ -162,14 +170,14 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Re
             let mut dataflow = dataflow::DataflowEngine::compute(&body, scope);
             passes::run(&mut body, &mut dataflow);
 
-            let mmap_fn = compiler::compile(&body, start, end, &dataflow, scope);
+            let CompileResult { func, max_stack_depth } = compiler::compile(&body, start, end, &dataflow, scope);
 
-            Ok::<_, CompileError>(mmap_fn)
-        })?);
+            Ok::<_, CompileError>(JitFnHandle(Rc::new(InnerJitFnHandle { func, max_stack_depth })))
+        })?;
 
         // TODO(idea): cache compiled fns (and other metadata like dataflow analysis?) on disk?
-        scope.jit.compiled_fn_cache.insert(key, Rc::clone(&func));
-        Ok(JitFnHandle(func))
+        scope.jit.compiled_fn_cache.insert(key, handle.clone());
+        Ok(handle)
     }
 }
 
