@@ -92,7 +92,8 @@ fn lower_from_ip(
                 stmts.push(Stmt::Generic(GenericStmt::LdLocal(local), instr_ip));
             }
             InstructionOperands::IntrinsicOp(IntrinsicOperands(kind)) => match kind {
-                IntrinsicKind::LtNumLConstR32((), NumberInline32(num)) => {
+                IntrinsicKind::LtNumLConstR32((), NumberInline32(num))
+                | IntrinsicKind::LtNumLConstR((), NumberInline8(num)) => {
                     stmts.push(Stmt::UncheckedNumberLt {
                         lhs: ValueSource::Stack,
                         rhs: ValueSource::Float(num),
@@ -170,14 +171,9 @@ fn lower_from_ip(
                 IntrinsicKind::GtNumLConstR32((), NumberInline32(num)) => {
                     stmts.push(Stmt::Generic(GenericStmt::GtNumLConstR32(num), instr_ip));
                 }
-                IntrinsicKind::GeNumLConstR((), NumberInline8(num)) => {
+                IntrinsicKind::GeNumLConstR((), NumberInline8(num))
+                | IntrinsicKind::GeNumLConstR32((), NumberInline32(num)) => {
                     stmts.push(Stmt::Generic(GenericStmt::GeNumLConstR(num), instr_ip));
-                }
-                IntrinsicKind::GeNumLConstR32((), NumberInline32(num)) => {
-                    stmts.push(Stmt::Generic(GenericStmt::GeNumLConstR32(num), instr_ip));
-                }
-                IntrinsicKind::LtNumLConstR((), NumberInline8(num)) => {
-                    stmts.push(Stmt::Generic(GenericStmt::LtNumLConstR(num), instr_ip));
                 }
                 IntrinsicKind::LeNumLConstR((), NumberInline8(num)) => {
                     stmts.push(Stmt::Generic(GenericStmt::LeNumLConstR(num), instr_ip));

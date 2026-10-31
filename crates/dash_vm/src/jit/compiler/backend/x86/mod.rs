@@ -449,6 +449,13 @@ pub fn addsd_reg_mem_sib(
     .write_into(buf, opcodes::ADDSD_REG_RM);
 }
 
+pub fn addsd_reg_mem_disp(buf: &mut CodeBuffer, dest: Register, base: Register, displacement: i32) -> CpuIp {
+    buf.push(0xf2);
+
+    encode_modrm_reg_mem(RegField::Reg(dest), Mem::RegDispImm(base, displacement))
+        .write_into(buf, opcodes::ADDSD_REG_RM)
+}
+
 /// Encodes `movsd [<base reg> + <index reg> * <scale> + <offset imm8>], <src reg>` (SIB addressing)
 pub fn movsd_mem_sib_reg(
     buf: &mut CodeBuffer,
