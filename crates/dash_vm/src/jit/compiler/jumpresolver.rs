@@ -3,7 +3,6 @@ use std::mem;
 use dash_middle::indexvec::IndexVec;
 use rustc_hash::FxHashMap;
 
-use crate::frame::Ip;
 use crate::jit::ir::{BasicBlockId, Body};
 
 pub type CpuIp = u32;

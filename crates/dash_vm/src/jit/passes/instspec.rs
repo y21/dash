@@ -1,5 +1,5 @@
-use crate::jit::dataflow::DataflowEngine;
 use crate::jit::dataflow::value::ValueType;
+use crate::jit::dataflow::{DataflowEngine, StmtOrTerminator};
 use crate::jit::ir::{Body, GenericStmt, Stmt, ValueSource};
 use crate::jit::passes::PassResult;
 
@@ -26,7 +26,7 @@ pub fn run(body: &mut Body, dataflow: &mut DataflowEngine) -> PassResult {
                             rhs: ValueSource::Stack,
                         };
                         result = PassResult::Changed;
-                        cursor.invalidate_block(body, stmt);
+                        cursor.invalidate_block(body, StmtOrTerminator::Stmt(stmt));
                     }
                 }
                 Stmt::Generic(GenericStmt::Lt, _) => {
@@ -40,7 +40,7 @@ pub fn run(body: &mut Body, dataflow: &mut DataflowEngine) -> PassResult {
                             rhs: ValueSource::Stack,
                         };
                         result = PassResult::Changed;
-                        cursor.invalidate_block(body, stmt);
+                        cursor.invalidate_block(body, StmtOrTerminator::Stmt(stmt));
                     }
                 }
                 _ => {}
