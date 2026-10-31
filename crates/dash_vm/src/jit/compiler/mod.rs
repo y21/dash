@@ -154,17 +154,13 @@ impl<'a> CodegenCx<'a> {
         stack_ptr_offset
     }
 
-    fn codegen_ld_stack_len(&mut self, dest: Register) -> usize {
-        let stack_len_offset = offset_of!(Vm, stack) + self.stack_vec_offsets.len;
+    fn stack_base_offset(&self) -> i32 {
+        (offset_of!(Vm, stack) + self.stack_vec_offsets.len) as i32
+    }
 
-        mov_reg_mem(
-            &mut self.buf,
-            dest,
-            self.prologue.vm_csreg,
-            stack_len_offset.try_into().unwrap(),
-        );
-
-        stack_len_offset
+    fn codegen_ld_stack_len(&mut self, dest: Register) {
+        let stack_offset = self.stack_base_offset();
+        mov_reg_mem(&mut self.buf, dest, self.prologue.vm_csreg, stack_offset);
     }
 
     fn codegen_u64_rip_offset(&mut self, value: u64, patch_site: u32) {
@@ -186,21 +182,13 @@ impl<'a> CodegenCx<'a> {
         self.codegen_f64_rip_offset(value, patch_site);
     }
 
-    fn apply_length_change(&mut self, len_change: LengthChange, stack_len_offset: usize) {
+    fn apply_length_change(&mut self, len_change: LengthChange, stack_len_offset: i32) {
         match len_change {
             LengthChange::Dec => {
-                decq_mem(
-                    &mut self.buf,
-                    self.prologue.vm_csreg,
-                    stack_len_offset.try_into().unwrap(),
-                );
+                decq_mem(&mut self.buf, self.prologue.vm_csreg, stack_len_offset);
             }
             LengthChange::Inc => {
-                incq_mem(
-                    &mut self.buf,
-                    self.prologue.vm_csreg,
-                    stack_len_offset.try_into().unwrap(),
-                );
+                incq_mem(&mut self.buf, self.prologue.vm_csreg, stack_len_offset);
             }
             LengthChange::None => {}
         }
@@ -252,7 +240,6 @@ impl<'a> CodegenCx<'a> {
                     | GenericStmt::LeNumLConstR(_)
                     | GenericStmt::LeNumLConstR32(_) => self.codegen_handler_stub(Instruction::IntrinsicOp, ip),
                     GenericStmt::Number(_) => self.codegen_handler_stub(Instruction::Number, ip),
-                    GenericStmt::Pop => self.codegen_handler_stub(Instruction::Pop, ip),
                     GenericStmt::Lt => self.codegen_handler_stub(Instruction::Lt, ip),
                     GenericStmt::Add => self.codegen_handler_stub(Instruction::Add, ip),
                     GenericStmt::Mul => self.codegen_handler_stub(Instruction::Mul, ip),
@@ -334,7 +321,7 @@ impl<'a> CodegenCx<'a> {
                     let fpr = self.fpr();
 
                     self.codegen_ld_stack_base(stack_ptr_reg);
-                    let stack_len_offset = self.codegen_ld_stack_len(len_reg);
+                    self.codegen_ld_stack_len(len_reg);
 
                     match lhs {
                         ResolvedValueSource::Stack(StackLenRelative(lhs)) => {
@@ -378,6 +365,7 @@ impl<'a> CodegenCx<'a> {
                         result_offset,
                     );
 
+                    let stack_len_offset = self.stack_base_offset();
                     self.apply_length_change(len_change, stack_len_offset);
 
                     self.add_fpr(fpr);
@@ -401,7 +389,7 @@ impl<'a> CodegenCx<'a> {
                     let fpr = self.fpr();
 
                     self.codegen_ld_stack_base(stack_ptr_reg);
-                    let stack_len_offset = self.codegen_ld_stack_len(len_reg);
+                    self.codegen_ld_stack_len(len_reg);
 
                     match rhs {
                         ResolvedValueSource::Stack(StackLenRelative(stack_off)) => {
@@ -451,11 +439,16 @@ impl<'a> CodegenCx<'a> {
                         result_offset,
                     );
 
+                    let stack_len_offset = self.stack_base_offset();
                     self.apply_length_change(len_change, stack_len_offset);
 
                     self.add_fpr(fpr);
                     self.add_caller_reg(len_reg);
                     self.add_caller_reg(stack_ptr_reg);
+                }
+                Stmt::Pop => {
+                    let stack_len_offset = self.stack_base_offset();
+                    self.apply_length_change(LengthChange::Dec, stack_len_offset);
                 }
             }
         }

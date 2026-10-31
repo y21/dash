@@ -196,7 +196,7 @@ fn lower_from_ip(
                 ));
             }
             InstructionOperands::Pop(PopOperands(())) => {
-                stmts.push(Stmt::Generic(GenericStmt::Pop, instr_ip));
+                stmts.push(Stmt::Pop);
             }
             InstructionOperands::Add(AddOperands(BinaryOperator { left: (), right: () })) => {
                 stmts.push(Stmt::Generic(GenericStmt::Add, instr_ip));

@@ -165,7 +165,6 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
                 state.stack.push(ValueMetadata { ty: ValueType::Boolean });
             }
             GenericStmt::Number(_) => state.stack.push(ValueMetadata { ty: ValueType::Number }),
-            GenericStmt::Pop => drop(state.stack.pop().unwrap()),
             GenericStmt::PostfixIncLocalNum(_) => state.stack.push(ValueMetadata { ty: ValueType::Number }),
             GenericStmt::StoreLocal { kind, local } => {
                 let out_ty = match kind {
@@ -459,6 +458,7 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
             assert!(lhs == rhs && rhs.ty == ValueType::Number);
             state.stack.push(out_ty);
         }
+        Stmt::Pop => drop(state.stack.pop().unwrap()),
     }
 }
 

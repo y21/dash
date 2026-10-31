@@ -25,7 +25,6 @@ pub enum GenericStmt {
     },
     LtNumLConstR32(f64),
     Number(f64),
-    Pop,
     PostfixIncLocalNum(BackLocalId),
     Add,
     Mul,
@@ -160,6 +159,7 @@ pub enum Stmt {
         lhs: ValueSource,
         rhs: ValueSource,
     },
+    Pop,
     /// Non-specialized, generic statement, directly lowered from source bytecode
     Generic(GenericStmt, Ip),
 }
