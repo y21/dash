@@ -153,7 +153,7 @@ impl<'a> CodegenCx<'a> {
             return;
         }
 
-        let mut cursor = self.dataflow.block_cursor(block);
+        let mut cursor = self.dataflow.block_cursor(self.body, block);
         for stmt in self.body.blocks[block].stmts.iter_indices() {
             let before_stmt_state = cursor.seek_to_before(self.body, StmtOrTerminator::Stmt(stmt));
             self.max_stack_depth = self.max_stack_depth.max(before_stmt_state.stack.len());

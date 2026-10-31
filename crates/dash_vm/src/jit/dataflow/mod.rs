@@ -80,17 +80,17 @@ impl DataflowEngine {
         engine
     }
 
-    pub fn block_cursor(&self, block: BasicBlockId) -> DataflowBlockCursor {
+    pub fn block_cursor(&self, body: &Body, block: BasicBlockId) -> DataflowBlockCursor {
         let state = self.entry_states[block].clone().unwrap();
         DataflowBlockCursor {
             state,
             block,
-            pos: StmtOrTerminator::Stmt(StmtId(0)),
+            pos: StmtOrTerminator::start(body, block),
         }
     }
 
-    pub fn block_cursor_mut(&mut self, block: BasicBlockId) -> DataflowBlockCursorMut<'_> {
-        let cursor = self.block_cursor(block);
+    pub fn block_cursor_mut(&mut self, body: &Body, block: BasicBlockId) -> DataflowBlockCursorMut<'_> {
+        let cursor = self.block_cursor(body, block);
         DataflowBlockCursorMut {
             engine: self,
             dirty: false,
@@ -491,6 +491,14 @@ impl Ord for StmtOrTerminator {
 }
 
 impl StmtOrTerminator {
+    pub fn start(body: &Body, block: BasicBlockId) -> StmtOrTerminator {
+        if body.blocks[block].stmts.is_empty() {
+            StmtOrTerminator::Terminator
+        } else {
+            StmtOrTerminator::Stmt(StmtId(0))
+        }
+    }
+
     pub fn next(self, block: BasicBlockId, body: &Body) -> Option<Self> {
         match self {
             StmtOrTerminator::Stmt(stmt_id) => {
@@ -564,7 +572,7 @@ impl<'a> DataflowBlockCursorMut<'a> {
     fn rerun_until(&mut self, body: &Body, end: StmtOrTerminator) {
         let entry = self.engine.entry_states[self.cursor.block].clone().unwrap();
         self.cursor.state = entry;
-        self.cursor.pos = StmtOrTerminator::Stmt(StmtId(0));
+        self.cursor.pos = StmtOrTerminator::start(body, self.cursor.block);
         self.cursor.seek_to_before(body, end);
     }
 
