@@ -237,8 +237,16 @@ impl Register {
         }
     }
 
+    /// Whether this needs a bare `REX` prefix, required for new 8-bit registers:
+    /// http://ref.x86asm.net/coder64.html#modrm_byte_32_64 ("r8(/r) with any REX prefix" row)
+    pub fn needs_bare_rex_prefix(self) -> bool {
+        matches!(self, Register::Spl | Register::Bpl | Register::Sil | Register::Dil)
+    }
+
+    /// Whether the register requires either of `R` | `B` | `X` as a rex prefix
+    /// (extension registers for modr/m and sib)
     #[rustfmt::skip]
-    pub fn needs_rex_prefix(self) -> bool {
+    pub fn needs_rbx_rex_prefix(self) -> bool {
         match self {
             Register::Al | Register::Ax | Register::Eax | Register::Rax | Register::Xmm0 |
             Register::Cl | Register::Cx | Register::Ecx | Register::Rcx | Register::Xmm1 |

@@ -145,7 +145,7 @@ pub fn mov_mem_reg_scaled(
 }
 
 pub fn push(buf: &mut CodeBuffer, reg: Register) {
-    if reg.needs_rex_prefix() {
+    if reg.needs_rbx_rex_prefix() {
         buf.push(rex::BASE | rex::B);
     }
     buf.push(opcodes::PUSH_REG + reg.register_field());
@@ -185,11 +185,10 @@ struct Rex(u8);
 
 impl Rex {
     pub const BASE: Self = Self(0x40);
-    pub const R: Self = Self(0b0100);
-    pub const X: Self = Self(0b0010);
-    pub const B: Self = Self(0b0001);
-    pub const W: Self = Self(0b1000);
-    #[expect(unused)]
+    pub const R: Self = Self(0x40 | 0b0100);
+    pub const X: Self = Self(0x40 | 0b0010);
+    pub const B: Self = Self(0x40 | 0b0001);
+    pub const W: Self = Self(0x40 | 0b1000);
     pub const EMPTY: Self = Self(0b0000);
 }
 impl BitOrAssign for Rex {
@@ -209,9 +208,8 @@ struct ModrmEncoding {
 impl ModrmEncoding {
     /// Returns the position of the displacement.
     fn write_into(self, buf: &mut CodeBuffer, opcode: &[u8]) -> CpuIp {
-        assert!((self.rex.0 & Rex::BASE.0) == Rex::BASE.0);
-
-        if self.rex != Rex::BASE {
+        if self.rex != Rex::EMPTY {
+            assert!((self.rex.0 & Rex::BASE.0) == Rex::BASE.0);
             buf.push(self.rex.0);
         }
         buf.extend_from_slice(opcode);
@@ -235,12 +233,15 @@ fn build_sib(scale: Scale, index: Option<Register>, base: Register) -> u8 {
 }
 
 fn encode_modrm_reg_reg(reg: RegField, rm: Register) -> ModrmEncoding {
-    let mut rex = Rex::BASE;
+    let mut rex = Rex::EMPTY;
 
     let reg_bits = match reg {
         RegField::Reg(register) => {
-            if register.needs_rex_prefix() {
+            if register.needs_rbx_rex_prefix() {
                 rex |= Rex::R;
+            }
+            if register.needs_bare_rex_prefix() {
+                rex |= Rex::BASE;
             }
             register.register_field()
         }
@@ -248,8 +249,11 @@ fn encode_modrm_reg_reg(reg: RegField, rm: Register) -> ModrmEncoding {
     };
     assert!(reg_bits <= 0b111);
     let rm_bits = rm.rm_field();
-    if rm.needs_rex_prefix() {
+    if rm.needs_rbx_rex_prefix() {
         rex |= Rex::B;
+    }
+    if rm.needs_bare_rex_prefix() {
+        rex |= Rex::BASE;
     }
     let modrm = modrm::MOD_R | (reg_bits << 3) | rm_bits;
 
@@ -273,13 +277,16 @@ enum Mem {
 }
 
 fn encode_modrm_reg_mem(reg: RegField, rm: Mem) -> ModrmEncoding {
-    let mut rex = Rex::BASE;
+    let mut rex = Rex::EMPTY;
     let mut modrm = 0;
 
     match reg {
         RegField::Reg(register) => {
-            if register.needs_rex_prefix() {
+            if register.needs_rbx_rex_prefix() {
                 rex |= Rex::R;
+            }
+            if register.needs_bare_rex_prefix() {
+                rex |= Rex::BASE;
             }
             modrm |= register.register_field() << 3;
         }
@@ -288,8 +295,11 @@ fn encode_modrm_reg_mem(reg: RegField, rm: Mem) -> ModrmEncoding {
 
     let (sib, displacement) = match rm {
         Mem::RegDispImm(reg, imm) => {
-            if reg.needs_rex_prefix() {
+            if reg.needs_rbx_rex_prefix() {
                 rex |= Rex::B;
+            }
+            if reg.needs_bare_rex_prefix() {
+                rex |= Rex::BASE;
             }
 
             if let Register::Rip = reg {
@@ -320,10 +330,10 @@ fn encode_modrm_reg_mem(reg: RegField, rm: Mem) -> ModrmEncoding {
             scale,
             offset,
         } => {
-            if base.needs_rex_prefix() {
+            if base.needs_rbx_rex_prefix() {
                 rex |= Rex::B;
             }
-            if index.needs_rex_prefix() {
+            if index.needs_rbx_rex_prefix() {
                 rex |= Rex::X;
             }
 
@@ -518,7 +528,7 @@ pub fn incq_reg(buf: &mut CodeBuffer, reg: Register) {
 }
 
 pub fn mov_reg_imm32(buf: &mut CodeBuffer, reg: Register, imm: u32) {
-    if reg.needs_rex_prefix() {
+    if reg.needs_rbx_rex_prefix() {
         buf.push(rex::BASE | rex::B);
     }
     buf.push(opcodes::MOV_REG_IMM32 + reg.register_field());
@@ -553,7 +563,7 @@ pub fn ret(buf: &mut CodeBuffer) {
 }
 
 pub fn pop(buf: &mut CodeBuffer, reg: Register) {
-    if reg.needs_rex_prefix() {
+    if reg.needs_rbx_rex_prefix() {
         buf.push(rex::BASE | rex::B);
     }
     buf.push(opcodes::POP_REG + reg.register_field());
@@ -1085,5 +1095,6 @@ mod tests {
         assert_eq!(Register::Rcx.to_8(), Register::Cl);
         assert_eq!(Register::Edx.to_8(), Register::Dl);
         assert_enc(&[0x41, 0x0F, 0x97, 0xC0], |b| seta_reg(b, Register::R8.to_8()));
+        assert_enc(&[0x40, 0x0F, 0x97, 0xC7], |b| seta_reg(b, Register::Dil));
     }
 }
