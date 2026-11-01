@@ -1458,7 +1458,7 @@ impl Vm {
             debug!("process task {:?}", task);
             if let Err(ex) = task.apply(This::default(), CallArgs::empty(), &mut scope) {
                 error!("uncaught async task exception");
-                if let Some(callback) = scope.params.unhandled_task_exception_callback() {
+                if let Some(callback) = scope.params.unhandled_task_exception_callback {
                     let ex = ex.root(&mut scope);
                     callback(&mut scope, ex, UncaughtExceptionSource::Task);
                 }
@@ -1598,7 +1598,7 @@ impl Vm {
         self.global.trace(&mut cx);
         debug!("trace shadow roots");
         self.shadow_roots.trace(&mut cx);
-        if let Some(state) = self.params.state_raw() {
+        if let Some(state) = self.params.state.as_deref() {
             debug!("trace state");
             state.trace(&mut cx);
         }

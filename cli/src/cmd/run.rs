@@ -1,8 +1,8 @@
 use dash_middle::parser::error::IntoFormattableErrors;
-use dash_optimizer::OptLevel;
 use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
 use dash_vm::eval::EvalError;
+use dash_vm::params::VmParams;
 use dash_vm::value::Root;
 use std::fs;
 use std::time::Instant;
@@ -10,16 +10,14 @@ use std::time::Instant;
 use anyhow::Context;
 use clap::ArgMatches;
 
+use crate::util::params_from_args;
+
 pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
     let path = args.get_one::<String>("file").context("Missing source")?;
     let nodejs = *args.get_one::<bool>("node").unwrap();
-    let initial_gc_threshold = args
-        .get_one::<&str>("initial-gc-threshold")
-        .map(|v| v.parse())
-        .transpose()?;
-    let opt = *args.get_one::<OptLevel>("opt").unwrap();
     let before = args.get_one::<bool>("timing").unwrap().then(Instant::now);
     let quiet = *args.get_one::<bool>("quiet").unwrap();
+    let params = params_from_args(args)?;
 
     if nodejs {
         #[cfg(feature = "nodejs")]
@@ -31,8 +29,7 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
 
             dash_node_impl::run_with_nodejs_mnemnoics(dash_node_impl::NodeRunArgs {
                 path,
-                opt,
-                initial_gc_threshold,
+                params,
                 script_args,
             })?;
         }
@@ -41,7 +38,7 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
             anyhow::bail!("dash needs to be compiled with the `nodejs` feature to support node-compat mode");
         }
     } else {
-        run_normal_mode(path, opt, quiet, initial_gc_threshold)?;
+        run_normal_mode(path, quiet, params)?;
     }
 
     if let Some(before) = before {
@@ -51,23 +48,23 @@ pub fn run(args: &ArgMatches) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_normal_mode(path: &str, opt: OptLevel, quiet: bool, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
+fn run_normal_mode(path: &str, quiet: bool, params: VmParams) -> anyhow::Result<()> {
     let source = fs::read_to_string(path).context("Failed to read source")?;
 
     let async_rt = tokio::runtime::Runtime::new()?;
-    async_rt.block_on(inner(source, opt, quiet, initial_gc_threshold))?;
+    async_rt.block_on(inner(source, quiet, params))?;
 
     Ok(())
 }
 
-async fn inner(source: String, opt: OptLevel, quiet: bool, initial_gc_threshold: Option<usize>) -> anyhow::Result<()> {
-    let mut rt = Runtime::new(initial_gc_threshold);
+async fn inner(source: String, quiet: bool, params: VmParams) -> anyhow::Result<()> {
+    let mut rt = Runtime::new(params);
 
     let module = dash_rt_modules::init_modules();
     rt.set_module_manager(module);
 
     let mut scope = rt.vm_mut().scope();
-    let value = match scope.eval(&source, opt) {
+    let value = match scope.eval(&source) {
         Ok(val) => val.root(&mut scope),
         Err(EvalError::Exception(val)) => val.root(&mut scope),
         Err(EvalError::Middle(errs)) => {

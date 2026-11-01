@@ -29,23 +29,30 @@ function fib(n) {
 return fib(12);
 ";
 
+fn mk_params() -> VmParams {
+    VmParams {
+        opt: OptLevel::Aggressive,
+        ..Default::default()
+    }
+}
+
 pub fn benchmark(cr: &mut Criterion) {
     cr.bench_function("interpreter", |b| {
         b.iter(|| {
-            let mut vm = Vm::new(Default::default());
-            vm.eval(CODE, OptLevel::Aggressive).unwrap();
+            let mut vm = Vm::new(mk_params());
+            vm.eval(CODE).unwrap();
         })
     });
     cr.bench_function("fib_recursive(12)", |b| {
         b.iter(|| {
-            let mut vm = Vm::new(Default::default());
-            vm.eval(FIBONACCI_RECURSIVE, OptLevel::Aggressive).unwrap();
+            let mut vm = Vm::new(mk_params());
+            vm.eval(FIBONACCI_RECURSIVE).unwrap();
         })
     });
     cr.bench_function("fib_iterative(12)", |b| {
         b.iter(|| {
-            let mut vm = Vm::new(Default::default());
-            vm.eval(FIBONACCI_ITERATIVE, OptLevel::Aggressive).unwrap();
+            let mut vm = Vm::new(mk_params());
+            vm.eval(FIBONACCI_ITERATIVE).unwrap();
         })
     });
     let mut tinycolor2 = ureq::get("https://www.unpkg.com/tinycolor2@1.6.0/cjs/tinycolor.js")
@@ -68,7 +75,7 @@ pub fn benchmark(cr: &mut Criterion) {
     let compile_result = FunctionCompiler::compile_str(&mut interner, &tinycolor2, OptLevel::Aggressive).unwrap();
     cr.bench_function("exec tinycolor2 parse hex+toFilter", |b| {
         b.iter(|| {
-            let mut vm = Vm::new(VmParams::new());
+            let mut vm = Vm::new(mk_params());
             vm.interner = interner.clone();
             vm.execute_frame(Frame::from_compile_result(compile_result.clone()))
                 .unwrap()

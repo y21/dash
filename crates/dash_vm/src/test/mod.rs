@@ -2,7 +2,6 @@ use core::f64;
 use std::ptr;
 
 use dash_middle::interner::sym;
-use dash_optimizer::OptLevel;
 
 use crate::Vm;
 use crate::gc::ObjectId;
@@ -19,7 +18,7 @@ const INTERPRETER: &str = include_str!("interpreter.js");
 fn interpreter() {
     let mut vm = Vm::new(Default::default());
     let mut scope = vm.scope();
-    let value = scope.eval(INTERPRETER, OptLevel::Basic).unwrap().root(&mut scope);
+    let value = scope.eval(INTERPRETER).unwrap().root(&mut scope);
 
     assert_eq!(scope.stack.len(), 0);
     assert_eq!(scope.frames.len(), 0);
@@ -111,12 +110,11 @@ fn simple() {
         globalThis.x = [];
         for (let i = 0; i < 4; i++) x.push({i});
     "#,
-            OptLevel::Basic,
         )
         .unwrap();
     scope.perform_gc();
     let array = scope
-        .eval("[x[0].i + x[1].i + x[2].i + x[3].i]", OptLevel::Basic)
+        .eval("[x[0].i + x[1].i + x[2].i + x[3].i]")
         .unwrap()
         .root(&mut scope);
     scope.perform_gc();
@@ -193,7 +191,6 @@ fn async_tasks() {
         }
     })();
     "#,
-        Default::default(),
     )
     .unwrap();
     assert!(vm.async_tasks.len() == 1);
@@ -218,10 +215,7 @@ macro_rules! simple_test {
             }
             ",
             );
-            let value = scope
-                .eval(&(prelude + $code), Default::default())
-                .unwrap()
-                .root(scope);
+            let value = scope.eval(&(prelude + $code)).unwrap().root(scope);
             assert_eq!(value, $expected);
             assert!(scope.stack.is_empty());
         }

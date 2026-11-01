@@ -25,7 +25,7 @@ pub fn eval(cx: CallContext) -> Result<Value, Value> {
         }
     };
 
-    match cx.scope.eval(&source, Default::default()) {
+    match cx.scope.eval(&source) {
         Ok(v) => Ok(v.root(cx.scope)),
         Err(EvalError::Exception(ex)) => Err(ex.root(cx.scope)),
         Err(EvalError::Middle(err)) => throw!(cx.scope, SyntaxError, "{}", err.formattable(&source, true)),

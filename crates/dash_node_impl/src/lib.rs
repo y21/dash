@@ -8,7 +8,6 @@ use anyhow::{Context, anyhow};
 use dash_log::debug;
 use dash_middle::interner::sym;
 use dash_middle::parser::error::IntoFormattableErrors;
-use dash_optimizer::OptLevel;
 use dash_proc_macro::Trace;
 use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
@@ -16,6 +15,7 @@ use dash_rt::state::State;
 use dash_vm::eval::EvalError;
 use dash_vm::gc::ObjectId;
 use dash_vm::localscope::LocalScope;
+use dash_vm::params::VmParams;
 use dash_vm::value::array::Array;
 use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::function::native::register_native_fn;
@@ -45,8 +45,7 @@ mod zlib;
 
 pub struct NodeRunArgs<'a, S> {
     pub path: &'a str,
-    pub opt: OptLevel,
-    pub initial_gc_threshold: Option<usize>,
+    pub params: VmParams,
     pub script_args: S,
 }
 
@@ -65,8 +64,7 @@ pub fn run_with_nodejs_mnemnoics<'a>(args: NodeRunArgs<'a, impl Iterator<Item = 
 async fn run_inner_fallible<'a>(
     NodeRunArgs {
         path: path_str,
-        opt,
-        initial_gc_threshold,
+        params,
         script_args,
     }: NodeRunArgs<'a, impl Iterator<Item = &'a str>>,
 ) -> anyhow::Result<()> {
@@ -96,7 +94,7 @@ async fn run_inner_fallible<'a>(
         ongoing_requires: RefCell::new(FxHashMap::default()),
     });
 
-    let mut rt = Runtime::new(initial_gc_threshold);
+    let mut rt = Runtime::new(params);
     let state @ state::State {
         sym:
             NodeSymbols {
@@ -178,7 +176,6 @@ async fn run_inner_fallible<'a>(
                 entry_path.parent().unwrap(),
                 &entry_path,
                 &entry,
-                opt,
                 global_state,
                 Rc::new(package_state),
             )
@@ -265,7 +262,6 @@ fn execute_node_module(
     dir_path: &Path,
     file_path: &Path,
     source: &str,
-    opt: OptLevel,
     global_state: Rc<GlobalState>,
     package: Rc<PackageState>,
 ) -> Result<Value, (EvalError, String)> {
@@ -295,7 +291,7 @@ fn execute_node_module(
     code += source;
     code += "\n})";
 
-    let fun = match scope.eval(&code, opt) {
+    let fun = match scope.eval(&code) {
         Ok(v) => v.root(scope),
         Err(err) => return Err((err, code)),
     };
@@ -399,7 +395,6 @@ impl Object for RequireFunction {
                     canonicalized_path.parent().unwrap(),
                     &canonicalized_path,
                     &source,
-                    OptLevel::default(),
                     self.state.clone(),
                     self.package.clone(),
                 ) {
@@ -444,7 +439,6 @@ impl Object for RequireFunction {
                 file_path.parent().unwrap(),
                 &file_path,
                 &source,
-                OptLevel::default(),
                 self.state.clone(),
                 Rc::new(package_state),
             ) {

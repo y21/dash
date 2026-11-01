@@ -1,3 +1,4 @@
+use std::env::temp_dir;
 use std::mem::offset_of;
 
 use dash_middle::compiler::instruction::Instruction;
@@ -587,13 +588,18 @@ pub fn compile(
     // TODO: do this in the same fn as assert_resolved? move this stuff to the JumpResolver?
     let buffer = patch_constant_loads(cx.buf, cx.constants);
 
-    std::fs::write("/tmp/dash_jit_out.bin", &buffer).unwrap();
-    println!("------- Start of x86 blob -------");
-    std::process::Command::new("objdump")
-        .args(&["-D", "-b", "binary", "-m", "i386:x86-64", "/tmp/dash_jit_out.bin"])
-        .status()
-        .unwrap();
-    println!("------- End of x86 blob -------");
+    if scope.params.experimental_objdump_jit {
+        let mut bin_path = temp_dir();
+        bin_path.push("dash_jit_out.bin");
+
+        std::fs::write(&bin_path, &buffer).unwrap();
+        eprintln!("------- Start of x86 blob -------");
+        std::process::Command::new("objdump")
+            .args(&["-D", "-b", "binary", "-m", "i386:x86-64", bin_path.to_str().unwrap()])
+            .status()
+            .unwrap();
+        eprintln!("------- End of x86 blob -------");
+    }
 
     CompileResult {
         func: MmapFn::alloc(&buffer),

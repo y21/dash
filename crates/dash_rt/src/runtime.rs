@@ -3,7 +3,6 @@ use std::time::SystemTime;
 
 use dash_middle::compiler::StaticImportKind;
 use dash_middle::interner::sym;
-use dash_optimizer::OptLevel;
 use dash_vm::eval::EvalError;
 use dash_vm::params::VmParams;
 use dash_vm::value::function::native::register_native_fn;
@@ -27,32 +26,27 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub fn new(initial_gc_threshold: Option<usize>) -> Self {
+    pub fn new(mut params: VmParams) -> Self {
         let rt = tokio::runtime::Handle::current();
 
         let (etx, erx) = mpsc::unbounded_channel();
 
         let state = State::new(rt, EventSender::new(etx));
-        let mut params = VmParams::new().set_static_import_callback(import_callback);
+        params.static_import_callback = Some(import_callback);
 
         #[cfg(feature = "random")]
         {
-            params = params.set_math_random_callback(random_callback);
+            params.math_random_callback = Some(random_callback);
         }
 
-        params = params
-            .set_time_millis_callback(time_callback)
-            .set_unhandled_task_exception_callback(|scope, value, cause| {
-                let insp = inspect::inspect(value, scope, InspectOptions::default())
-                    .unwrap_or_else(|_| "<failed to inspect unhandled exception>".into());
+        params.time_millis_callback = Some(time_callback);
+        params.unhandled_task_exception_callback = Some(|scope, value, cause| {
+            let insp = inspect::inspect(value, scope, InspectOptions::default())
+                .unwrap_or_else(|_| "<failed to inspect unhandled exception>".into());
 
-                tracing::error!("unhandled async task exception (cause: {cause:?}): {insp}");
-            })
-            .set_state(Box::new(state));
-
-        if let Some(threshold) = initial_gc_threshold {
-            params = params.set_initial_gc_rss_threshold(threshold);
-        }
+            tracing::error!("unhandled async task exception (cause: {cause:?}): {insp}");
+        });
+        params.state = Some(Box::new(state));
 
         let vm = Vm::new(params);
 
@@ -98,8 +92,8 @@ impl Runtime {
         State::from_vm_mut(&mut self.vm).set_root_module(module_manager);
     }
 
-    pub fn eval(&mut self, code: &str, opt: OptLevel) -> Result<Unrooted, EvalError> {
-        self.vm.eval(code, opt)
+    pub fn eval(&mut self, code: &str) -> Result<Unrooted, EvalError> {
+        self.vm.eval(code)
     }
 
     pub fn vm(&self) -> &Vm {

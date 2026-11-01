@@ -20,7 +20,7 @@ pub enum EvalError {
 }
 
 impl Vm {
-    pub fn eval(&mut self, input: &str, opt: OptLevel) -> Result<Unrooted, EvalError> {
+    pub fn eval(&mut self, input: &str) -> Result<Unrooted, EvalError> {
         let tokens = Lexer::new(&mut self.interner, input)
             .scan_all()
             .map_err(EvalError::Middle)?;
@@ -30,7 +30,7 @@ impl Vm {
 
         let nameres = name_res(&ast, scope_counter.len(), local_counter.len());
 
-        let cr = FunctionCompiler::new(input, opt, nameres, scope_counter, &mut self.interner)
+        let cr = FunctionCompiler::new(input, self.params.opt, nameres, scope_counter, &mut self.interner)
             .compile_ast(ast, true)
             .map_err(|err| EvalError::Middle(vec![err]))?;
         let mut frame = Frame::from_compile_result(cr);

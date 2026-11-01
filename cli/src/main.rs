@@ -17,6 +17,11 @@ fn main() -> anyhow::Result<()> {
         .value_parser(|val: &_| OptLevel::from_level(val).ok_or("unknown opt level (must be between 0 and 3)"))
         .default_value("1");
 
+    let experimental_objdump_jit = Arg::new("xobjdump-jit")
+        .long("xobjdump-jit")
+        .help("[experimental] Dump JIT-compiled machine code")
+        .action(ArgAction::SetTrue);
+
     let nodejs = Arg::new("node").long("node").action(ArgAction::SetTrue);
 
     let initial_gc_threshold = Arg::new("initial-gc-threshold")
@@ -41,6 +46,7 @@ fn main() -> anyhow::Result<()> {
                 .arg(Arg::new("quiet").short('q').long("quiet").action(ArgAction::SetTrue))
                 .arg(opt_level.clone())
                 .arg(nodejs)
+                .arg(experimental_objdump_jit)
                 .arg(initial_gc_threshold.clone())
                 .arg(Arg::new("script_args").trailing_var_arg(true).num_args(..)),
         )

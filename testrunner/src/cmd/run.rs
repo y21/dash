@@ -214,7 +214,7 @@ fn run_test(setup: &str, path: &str, verbose: bool) -> RunResult {
 
     let maybe_pass = panic::catch_unwind(move || {
         let mut vm = Vm::new(VmParams::default());
-        match (vm.eval(&contents, Default::default()), negative.map(|n| n.phase)) {
+        match (vm.eval(&contents), negative.map(|n| n.phase)) {
             (Ok(_), None) => RunResult::Pass,
             (Ok(_), Some(..)) => RunResult::Fail,
             (Err(err), negative) => {

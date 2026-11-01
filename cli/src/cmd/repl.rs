@@ -3,6 +3,7 @@ use dash_optimizer::OptLevel;
 use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
 use dash_vm::eval::EvalError;
+use dash_vm::params::VmParams;
 use dash_vm::value::Root;
 use rustyline::DefaultEditor;
 
@@ -10,7 +11,10 @@ pub fn repl() -> anyhow::Result<()> {
     let mut rl = DefaultEditor::new()?;
 
     tokio::runtime::Runtime::new()?.block_on(async move {
-        let mut rt = Runtime::new(None);
+        let mut rt = Runtime::new(VmParams {
+            opt: OptLevel::Aggressive,
+            ..Default::default()
+        });
 
         while let Ok(input) = rl.readline("> ") {
             if input.is_empty() {
@@ -20,7 +24,7 @@ pub fn repl() -> anyhow::Result<()> {
             rl.add_history_entry(&input).unwrap();
 
             rt.vm_mut().with_scope(|scope| {
-                match scope.eval(&input, OptLevel::Aggressive) {
+                match scope.eval(&input) {
                     Ok(value) => println!("{}", format_value(value.root(scope), scope).unwrap()),
                     Err(EvalError::Exception(value)) => {
                         println!("{}", format_value(value.root(scope), scope).unwrap())

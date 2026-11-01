@@ -1,6 +1,7 @@
 use std::any::Any;
 
 use dash_middle::compiler::StaticImportKind;
+use dash_optimizer::OptLevel;
 
 use crate::UncaughtExceptionSource;
 use crate::gc::trace::Trace;
@@ -33,16 +34,29 @@ impl<T: Any + Trace> State for T {
 }
 
 pub struct VmParams {
+    /// Callback that's invoked to generate a random number for `Math.random()`.
     pub math_random_callback: Option<MathRandomCallback>,
+    /// Callback that's invoked to get the current time in milliseconds (used by `Date`).
     pub time_millis_callback: Option<TimeMillisCallback>,
+    /// Callback that's invoked to resolve static imports.
     pub static_import_callback: Option<StaticImportCallback>,
+    /// Callback that's invoked to resolve dynamic imports.
     pub dynamic_import_callback: Option<DynamicImportCallback>,
+    /// Callback that's invoked when a `debugger;` statement is evaluated.
+    /// No-op if None.
     pub debugger_callback: Option<DebuggerCallback>,
+    /// Callback that's invoked when an uncaught exception within an async task is encountered.
     pub unhandled_task_exception_callback: Option<UnhandledTaskException>,
+    /// Initial threshold for the garbage collector's RSS before triggering a collection.
     pub initial_gc_rss_threshold: Option<usize>,
+    /// Custom state usable by embedders.
     pub state: Option<Box<dyn State>>,
-    /// Whether to enable JIT compilation. Enabled by default.
+    /// [EXPERIMENTAL] Whether to enable JIT compilation. Enabled by default if compiled with the `jit` feature.
     pub enable_jit: bool,
+    /// [EXPERIMENTAL] Dump JIT-compiled code for debugging purposes by passing it through `objdump`.
+    pub experimental_objdump_jit: bool,
+    /// Optimization level for dynamic code evaluation and JIT.
+    pub opt: OptLevel,
 }
 
 impl Default for VmParams {
@@ -57,6 +71,8 @@ impl Default for VmParams {
             initial_gc_rss_threshold: None,
             state: None,
             enable_jit: true,
+            experimental_objdump_jit: false,
+            opt: OptLevel::default(),
         }
     }
 }
@@ -66,62 +82,11 @@ impl VmParams {
         VmParams::default()
     }
 
-    pub fn set_static_import_callback(mut self, callback: StaticImportCallback) -> Self {
-        self.static_import_callback = Some(callback);
-        self
-    }
-
-    pub fn set_dynamic_import_callback(mut self, callback: DynamicImportCallback) -> Self {
-        self.dynamic_import_callback = Some(callback);
-        self
-    }
-
-    pub fn set_state(mut self, state: Box<dyn State>) -> Self {
-        self.state = Some(state);
-        self
-    }
-
-    pub fn update_state(&mut self, state: Box<dyn State>) {
-        self.state = Some(state);
-    }
-
     pub fn state<T: 'static>(&self) -> Option<&T> {
         self.state.as_ref().and_then(|s| (**s).as_any().downcast_ref::<T>())
     }
 
     pub fn state_mut<T: 'static>(&mut self) -> Option<&mut T> {
         self.state.as_mut().and_then(|s| (**s).as_any_mut().downcast_mut::<T>())
-    }
-
-    pub fn state_raw(&self) -> Option<&dyn State> {
-        self.state.as_deref()
-    }
-
-    pub fn set_math_random_callback(mut self, callback: MathRandomCallback) -> Self {
-        self.math_random_callback = Some(callback);
-        self
-    }
-    pub fn set_time_millis_callback(mut self, callback: TimeMillisCallback) -> Self {
-        self.time_millis_callback = Some(callback);
-        self
-    }
-
-    pub fn set_debugger_callback(mut self, callback: DebuggerCallback) -> Self {
-        self.debugger_callback = Some(callback);
-        self
-    }
-
-    pub fn set_unhandled_task_exception_callback(mut self, callback: UnhandledTaskException) -> Self {
-        self.unhandled_task_exception_callback = Some(callback);
-        self
-    }
-
-    pub fn unhandled_task_exception_callback(&self) -> Option<UnhandledTaskException> {
-        self.unhandled_task_exception_callback
-    }
-
-    pub fn set_initial_gc_rss_threshold(mut self, threshold: usize) -> Self {
-        self.initial_gc_rss_threshold = Some(threshold);
-        self
     }
 }
