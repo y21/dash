@@ -62,6 +62,7 @@ impl JumpResolver {
         }
     }
 
+    #[expect(unused)]
     pub fn user_label(&self, block: BasicBlockId) -> Option<CpuIp> {
         match &self.user_labels[block] {
             PatchData::Resolved { ip } => Some(*ip),

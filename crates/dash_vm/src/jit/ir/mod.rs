@@ -17,6 +17,7 @@ index_type! {
 }
 
 #[derive(Debug)]
+#[expect(unused)]
 pub enum GenericStmt {
     LdLocal(BackLocalId),
     StoreLocal {

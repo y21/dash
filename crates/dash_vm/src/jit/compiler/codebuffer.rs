@@ -14,6 +14,7 @@ impl CodeBuffer {
         }
     }
 
+    #[cfg_attr(not(test), expect(unused))]
     pub fn buffer(&self) -> &[u8] {
         &self.buffer
     }

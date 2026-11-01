@@ -110,6 +110,7 @@ impl<'a> CodegenCx<'a> {
     pub fn fpr(&mut self) -> Register {
         self.fprs.pop().expect("No more floating-point registers available")
     }
+    #[expect(dead_code)]
     fn callee_reg64(&mut self) -> Register {
         self.callee_regs
             .pop()
@@ -118,6 +119,7 @@ impl<'a> CodegenCx<'a> {
     fn add_caller_reg(&mut self, reg: Register) {
         self.caller_regs.push(reg);
     }
+    #[expect(dead_code)]
     fn add_callee_reg(&mut self, reg: Register) {
         self.callee_regs.push(reg);
     }

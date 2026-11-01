@@ -1,9 +1,8 @@
-use std::sync::LazyLock;
-
 #[derive(Debug)]
 pub struct VecOffsets {
     pub ptr: usize,
     pub len: usize,
+    #[cfg_attr(not(test), expect(unused))]
     pub cap: usize,
 }
 

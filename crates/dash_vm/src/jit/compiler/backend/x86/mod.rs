@@ -5,7 +5,7 @@ mod modrm {
     pub const MOD_M8_SIB: u8 = 0b01_000_100;
 }
 
-#[expect(dead_code)]
+#[expect(unused)]
 mod rex {
     // TODO: remove these in favor of the Rex enum
     pub const W: u8 = 0x08;
@@ -16,6 +16,7 @@ mod rex {
     pub const BASE: u8 = 0x40;
 }
 
+#[cfg_attr(not(test), expect(unused))]
 mod opcodes {
     pub const MOV_REG_IMM32: u8 = 0xB8;
     pub const MOV_RM_R: u8 = 0x89;
@@ -161,6 +162,7 @@ pub fn mov_reg_mem(buf: &mut CodeBuffer, dest: Register, base: Register, offset:
 
 pub enum Scale {
     X1 = 0b00,
+    #[cfg_attr(not(test), expect(unused))]
     X2 = 0b01,
     X4 = 0b10,
     X8 = 0b11,
@@ -180,12 +182,14 @@ impl Scale {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Rex(u8);
+
 impl Rex {
     pub const BASE: Self = Self(0x40);
     pub const R: Self = Self(0b0100);
     pub const X: Self = Self(0b0010);
     pub const B: Self = Self(0b0001);
     pub const W: Self = Self(0b1000);
+    #[expect(unused)]
     pub const EMPTY: Self = Self(0b0000);
 }
 impl BitOrAssign for Rex {
@@ -494,6 +498,7 @@ pub fn incq_mem(buf: &mut CodeBuffer, reg: Register, offset: i32) {
 }
 
 /// Encodes `dec <reg>` instruction
+#[cfg_attr(not(test), expect(unused))]
 pub fn dec_reg(buf: &mut CodeBuffer, reg: Register) {
     let mut encoding = encode_modrm_reg_reg(RegField::Bits(1), reg);
     if reg.size_bits() == 64 {
@@ -502,6 +507,8 @@ pub fn dec_reg(buf: &mut CodeBuffer, reg: Register) {
     encoding.write_into(buf, &[opcodes::DEC_INC_RM64]);
 }
 
+/// Encodes `inc <reg>` instruction
+#[cfg_attr(not(test), expect(unused))]
 pub fn incq_reg(buf: &mut CodeBuffer, reg: Register) {
     let mut encoding = encode_modrm_reg_reg(RegField::Bits(0), reg);
     if reg.size_bits() == 64 {
@@ -559,6 +566,7 @@ pub fn add_rsp_imm8(buf: &mut CodeBuffer, imm: u8) {
     buf.push(imm as u8);
 }
 
+#[cfg_attr(not(test), expect(unused))]
 pub fn sub_rsp_imm8(buf: &mut CodeBuffer, imm: u8) {
     let mut encoding = encode_modrm_reg_reg(RegField::Bits(5), Register::Rsp);
     encoding.rex |= Rex::W;
@@ -587,6 +595,7 @@ pub fn je_imm32(buf: &mut CodeBuffer, offset: i32) -> CpuIp {
     offset_ip
 }
 
+#[expect(unused)]
 pub fn jne_block(buf: &mut CodeBuffer, target: BasicBlockId) {
     let patch_site = jne_imm32(buf, 0);
     if let Some(target_x86_ip) = buf.jumps.add_user_reference(target, patch_site) {
@@ -636,6 +645,7 @@ pub fn jmp_block(buf: &mut CodeBuffer, target: BasicBlockId) {
     }
 }
 
+#[cfg_attr(not(test), expect(unused))]
 pub fn lea_reg_mem(buf: &mut CodeBuffer, dest: Register, base: Register, offset: i32) {
     let mut encoding = encode_modrm_reg_mem(RegField::Reg(dest), Mem::RegDispImm(base, offset));
     if dest.size_bits() == 64 {

@@ -11,7 +11,6 @@ use crate::jit::mmap::MmapFn;
 use crate::localscope::LocalScope;
 use crate::value::{Unpack, Unrooted, ValueKind};
 
-mod basic_blocks;
 mod compiler;
 mod dataflow;
 mod ir;
@@ -279,14 +278,11 @@ impl<'a> BufferRef<'a> {
         self.buf.len() as u32
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.buf.is_empty()
-    }
-
     pub fn as_slice(&self) -> &'a [u8] {
         self.buf
     }
 
+    #[expect(dead_code)]
     pub fn slice(&self, r: impl RangeBounds<Ip>) -> BufferRef<'a> {
         let start = map_bound_into(r.start_bound(), |&Ip(ip)| ip as usize);
         let end = map_bound_into(r.end_bound(), |&Ip(ip)| ip as usize);
