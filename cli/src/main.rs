@@ -17,9 +17,15 @@ fn main() -> anyhow::Result<()> {
         .value_parser(|val: &_| OptLevel::from_level(val).ok_or("unknown opt level (must be between 0 and 3)"))
         .default_value("1");
 
-    let experimental_objdump_jit = Arg::new("xobjdump-jit")
-        .long("xobjdump-jit")
+    let experimental_objdump_jit = Arg::new("Xobjdump-jit")
+        .long("Xobjdump-jit")
         .help("[experimental] Dump JIT-compiled machine code")
+        .action(ArgAction::SetTrue);
+
+    let experimental_jit = Arg::new("Xjit")
+        .long("Xjit")
+        .help("[experimental] Enable JIT compilation")
+        .default_missing_value("true")
         .action(ArgAction::SetTrue);
 
     let nodejs = Arg::new("node").long("node").action(ArgAction::SetTrue);
@@ -47,6 +53,7 @@ fn main() -> anyhow::Result<()> {
                 .arg(opt_level.clone())
                 .arg(nodejs)
                 .arg(experimental_objdump_jit)
+                .arg(experimental_jit)
                 .arg(initial_gc_threshold.clone())
                 .arg(Arg::new("script_args").trailing_var_arg(true).num_args(..)),
         )

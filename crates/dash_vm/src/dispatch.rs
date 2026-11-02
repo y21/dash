@@ -1135,7 +1135,7 @@ mod handlers {
                     }
                     None => {
                         // We've saturated the counter. Attempt to JIT if we can.
-                        if !cx.params.enable_jit {
+                        if !cx.params.experimental_jit {
                             cx.frames.set_byte(hotness_byte_ip, hotness.disable().raw());
                             break 'jit;
                         }

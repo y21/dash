@@ -51,9 +51,11 @@ pub struct VmParams {
     pub initial_gc_rss_threshold: Option<usize>,
     /// Custom state usable by embedders.
     pub state: Option<Box<dyn State>>,
-    /// [EXPERIMENTAL] Whether to enable JIT compilation. Enabled by default if compiled with the `jit` feature.
-    pub enable_jit: bool,
+    /// [EXPERIMENTAL] Whether to enable JIT compilation.
+    /// (Requires the `jit` feature)
+    pub experimental_jit: bool,
     /// [EXPERIMENTAL] Dump JIT-compiled code for debugging purposes by passing it through `objdump`.
+    /// (Requires the `jit` feature)
     pub experimental_objdump_jit: bool,
     /// Optimization level for dynamic code evaluation and JIT.
     pub opt: OptLevel,
@@ -70,7 +72,7 @@ impl Default for VmParams {
             unhandled_task_exception_callback: None,
             initial_gc_rss_threshold: None,
             state: None,
-            enable_jit: true,
+            experimental_jit: true,
             experimental_objdump_jit: false,
             opt: OptLevel::default(),
         }

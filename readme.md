@@ -38,6 +38,19 @@ $ mv ~/.cargo/bin/dash-cli ~/.cargo/bin/dashjs
 $ dashjs run example.js
 ```
 
+## JIT
+
+> NOTE: currently only available on x86!
+
+This implementation comes with a (currently limited) x86 JIT compiler. Compile with `--features jit` and pass `--Xjit` to enable.
+```sh
+$ echo 'for (let i = 0; i < 1000000;i++);' > /tmp/loop.js
+$ ../target/release/dash-cli run --Xjit /tmp/loop.js -qt
+
+43.275208ms
+```
+Additionally, pass `--Xobjdump-jit` to dump the generated machine code (requires an `objdump` binary to be available on `$PATH`).
+
 ### Embedding into a Rust application
 
 Note that the API is very unstable. Things are constantly changing, so your code may break at any time when bumping the version, which is why it is highly recommended to lock in to a specific revision for now.
