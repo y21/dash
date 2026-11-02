@@ -225,11 +225,11 @@ impl<'tcx> mir::visit::Visitor<'tcx> for PlaceVisitor<'_, '_, 'tcx> {
                     let field = &adt.variant(VariantIdx::from_u32(0)).fields[idx];
                     if has_no_gc_attr(self.cx.tcx, field.did) {
                         kill = false;
-                        continue;
+                        break;
                     }
                 }
 
-                kill = true;
+                ty = PlaceTy::from_ty(ty).projection_ty(self.cx.tcx, projection).ty;
             }
         }
 
