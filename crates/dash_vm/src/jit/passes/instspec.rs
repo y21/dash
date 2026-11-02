@@ -4,8 +4,6 @@ use crate::jit::ir::{Body, GenericStmt, Stmt, ValueSource};
 use crate::jit::passes::PassResult;
 
 pub fn run(body: &mut Body, dataflow: &mut DataflowEngine) -> PassResult {
-    println!("Running InstSpec pass");
-
     let mut result = PassResult::Unchanged;
 
     for block in body.blocks.iter_indices() {
