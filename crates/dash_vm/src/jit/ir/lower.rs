@@ -1,5 +1,6 @@
 use std::collections::hash_map::Entry;
 
+use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::operands::{
     AddOperands, BinaryOperator, BindThisOperands, BitandOperands, BitnotOperands, BitorOperands, BitshlOperands,
     BitshrOperands, BitushrOperands, BitxorOperands, BooleanConstantOperands, BooleanConstantWide, CallOperands,
@@ -24,7 +25,7 @@ use crate::jit::ir::{
     BasicBlock, BasicBlockId, Body, BranchTarget, ConditionalGotoCondition, ConditionalGotoPopPolicy, GenericStmt,
     Stmt, Terminator, ValueSource,
 };
-use crate::jit::{BufferRef, NoValueExtractContext};
+use crate::jit::{BufferRef, CompileError, NoValueExtractContext};
 use crate::localscope::LocalScope;
 
 fn create_terminator(
@@ -36,18 +37,18 @@ fn create_terminator(
     offset: i16,
     pop: ConditionalGotoPopPolicy,
     condition: ConditionalGotoCondition,
-) -> Terminator {
+) -> Result<Terminator, CompileError> {
     let true_target = cx.ip() + offset;
     let false_target = cx.ip();
 
-    let true_ = lower_to_branch_target(bytecode, true_target, blocks, ip_to_block, scope);
-    let false_ = lower_to_branch_target(bytecode, false_target, blocks, ip_to_block, scope);
-    Terminator::ConditionalGoto {
+    let true_ = lower_to_branch_target(bytecode, true_target, blocks, ip_to_block, scope)?;
+    let false_ = lower_to_branch_target(bytecode, false_target, blocks, ip_to_block, scope)?;
+    Ok(Terminator::ConditionalGoto {
         true_,
         false_,
         pop,
         condition,
-    }
+    })
 }
 
 fn lower_to_branch_target(
@@ -56,11 +57,17 @@ fn lower_to_branch_target(
     blocks: &mut IndexVec<BasicBlock, BasicBlockId>,
     ip_to_block: &mut FxHashMap<Ip, BasicBlockId>,
     scope: &LocalScope<'_>,
-) -> BranchTarget {
+) -> Result<BranchTarget, CompileError> {
     if ip.0 == bytecode.len() {
-        BranchTarget::Break
+        Ok(BranchTarget::Break)
     } else {
-        BranchTarget::Block(lower_from_ip(bytecode, ip, blocks, ip_to_block, scope))
+        Ok(BranchTarget::Block(lower_from_ip(
+            bytecode,
+            ip,
+            blocks,
+            ip_to_block,
+            scope,
+        )?))
     }
 }
 
@@ -70,10 +77,10 @@ fn lower_from_ip(
     blocks: &mut IndexVec<BasicBlock, BasicBlockId>,
     ip_to_block: &mut FxHashMap<Ip, BasicBlockId>,
     scope: &LocalScope<'_>,
-) -> BasicBlockId {
+) -> Result<BasicBlockId, CompileError> {
     let block = match ip_to_block.entry(ip) {
         Entry::Occupied(entry) => {
-            return *entry.get();
+            return Ok(*entry.get());
         }
         Entry::Vacant(entry) => {
             let block = blocks.push(BasicBlock::dummy());
@@ -420,7 +427,7 @@ fn lower_from_ip(
             InstructionOperands::Jmp(JmpOperands(offset))
             | InstructionOperands::LoopBackJmp(LoopBackjumpOperands { offset, hotness: _ }) => {
                 let target = cx.ip() + offset;
-                let succ = lower_to_branch_target(bytecode, target, blocks, ip_to_block, scope);
+                let succ = lower_to_branch_target(bytecode, target, blocks, ip_to_block, scope)?;
                 terminator = Some(Terminator::Goto(succ));
                 break;
             }
@@ -437,7 +444,7 @@ fn lower_from_ip(
                     offset,
                     ConditionalGotoPopPolicy::Peek,
                     ConditionalGotoCondition::IsFalsy,
-                ));
+                )?);
                 break;
             }
             InstructionOperands::JmpTrueNP(JmpTrueNoPopOperands(ConditionalJumpNoPopOperands { offset, value: _ })) => {
@@ -450,7 +457,7 @@ fn lower_from_ip(
                     offset,
                     ConditionalGotoPopPolicy::Peek,
                     ConditionalGotoCondition::IsTruthy,
-                ));
+                )?);
                 break;
             }
             InstructionOperands::JmpNullishNP(JmpNullishNoPopOperands(ConditionalJumpNoPopOperands {
@@ -466,7 +473,7 @@ fn lower_from_ip(
                     offset,
                     ConditionalGotoPopPolicy::Peek,
                     ConditionalGotoCondition::IsNullish,
-                ));
+                )?);
                 break;
             }
             InstructionOperands::JmpUndefinedNP(JmpUndefinedNoPopOperands(ConditionalJumpNoPopOperands {
@@ -482,7 +489,7 @@ fn lower_from_ip(
                     offset,
                     ConditionalGotoPopPolicy::Peek,
                     ConditionalGotoCondition::IsUndefined,
-                ));
+                )?);
                 break;
             }
             InstructionOperands::JmpFalseP(JmpFalsePopOperands(ConditionalJumpPopOperands { offset, value: _ })) => {
@@ -495,7 +502,7 @@ fn lower_from_ip(
                     offset,
                     ConditionalGotoPopPolicy::Pop,
                     ConditionalGotoCondition::IsFalsy,
-                ));
+                )?);
                 break;
             }
             InstructionOperands::JmpTrueP(JmpTruePopOperands(ConditionalJumpPopOperands { offset, value: _ })) => {
@@ -508,7 +515,7 @@ fn lower_from_ip(
                     offset,
                     ConditionalGotoPopPolicy::Pop,
                     ConditionalGotoCondition::IsTruthy,
-                ));
+                )?);
                 break;
             }
             InstructionOperands::JmpNullishP(JmpNullishPopOperands(ConditionalJumpPopOperands {
@@ -524,7 +531,7 @@ fn lower_from_ip(
                     offset,
                     ConditionalGotoPopPolicy::Pop,
                     ConditionalGotoCondition::IsNullish,
-                ));
+                )?);
                 break;
             }
             InstructionOperands::JmpUndefinedP(JmpUndefinedPopOperands(ConditionalJumpPopOperands {
@@ -540,21 +547,24 @@ fn lower_from_ip(
                     offset,
                     ConditionalGotoPopPolicy::Pop,
                     ConditionalGotoCondition::IsUndefined,
-                ));
+                )?);
                 break;
             }
-            _ => unimplemented!("Instruction {instr:?} at {instr_ip:?} is not implemented"),
+            _ => {
+                let instr = Instruction::from_repr(bytecode[ip]).unwrap();
+                return Err(CompileError::UnimplementedInstruction(instr, ip));
+            }
         }
     }
 
     blocks[block] = BasicBlock { stmts, terminator };
-    block
+    Ok(block)
 }
 
-pub fn lower_body(bytecode: BufferRef<'_>, scope: &LocalScope<'_>) -> Body {
+pub fn lower_body(bytecode: BufferRef<'_>, scope: &LocalScope<'_>) -> Result<Body, CompileError> {
     let mut blocks = IndexVec::new();
     let mut ip_to_block = FxHashMap::default();
-    let root = lower_from_ip(bytecode, Ip::ZERO, &mut blocks, &mut ip_to_block, scope);
+    let root = lower_from_ip(bytecode, Ip::ZERO, &mut blocks, &mut ip_to_block, scope)?;
 
-    Body { blocks, root }
+    Ok(Body { blocks, root })
 }

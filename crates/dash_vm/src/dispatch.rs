@@ -1145,7 +1145,7 @@ mod handlers {
                         let func = match jit::compile_loop_region(&mut cx.scope, start_ip, end_ip) {
                             Ok(func) => func,
                             Err(err) => {
-                                dash_log::warn!("failed to jit compile region {start_ip:?}..={end_ip:?}: {err:?}");
+                                dash_log::warn!("failed to jit compile region {start_ip:?}..={end_ip:?}: {err}");
                                 cx.frames.set_byte(hotness_byte_ip, hotness.disable().raw());
                                 break 'jit;
                             }

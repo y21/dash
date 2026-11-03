@@ -1,3 +1,5 @@
+use std::error::Error;
+use std::fmt::Display;
 use std::mem::MaybeUninit;
 use std::ops::{Bound, Index, RangeBounds};
 use std::rc::Rc;
@@ -25,7 +27,21 @@ use dash_middle::compiler::operands::InstructionOperands;
 pub use state::State;
 
 #[derive(Debug)]
-pub enum CompileError {}
+pub enum CompileError {
+    UnimplementedInstruction(Instruction, Ip),
+}
+
+impl Display for CompileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CompileError::UnimplementedInstruction(instr, ip) => {
+                write!(f, "Unimplemented instruction {:?} at {:?}", instr, ip)
+            }
+        }
+    }
+}
+
+impl Error for CompileError {}
 
 #[derive(Debug)]
 struct InnerJitFnHandle {
@@ -165,13 +181,13 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Re
             let bytecode = &bytecode[start.0 as usize..end.0 as usize];
             let bytecode = BufferRef::from(bytecode);
 
-            let mut body = ir::lower_body(bytecode, scope);
+            let mut body = ir::lower_body(bytecode, scope)?;
             let mut dataflow = dataflow::DataflowEngine::compute(&body, scope);
             passes::run(&mut body, &mut dataflow);
 
             let CompileResult { func, max_stack_depth } = compiler::compile(&body, start, end, &dataflow, scope);
 
-            Ok::<_, CompileError>(JitFnHandle(Rc::new(InnerJitFnHandle { func, max_stack_depth })))
+            Ok(JitFnHandle(Rc::new(InnerJitFnHandle { func, max_stack_depth })))
         })?;
 
         // TODO(idea): cache compiled fns (and other metadata like dataflow analysis?) on disk?
