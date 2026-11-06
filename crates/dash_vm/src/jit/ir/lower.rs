@@ -96,7 +96,7 @@ fn lower_from_ip(
     while let Some((instr_ip, instr)) = cx.next_instruction_with_operands() {
         match instr {
             InstructionOperands::LdLocal(LdLocalOperands(local)) => {
-                stmts.push(Stmt::Generic(GenericStmt::LdLocal(local), instr_ip));
+                stmts.push(Stmt::LdLocal(local));
             }
             InstructionOperands::IntrinsicOp(IntrinsicOperands(kind)) => match kind {
                 IntrinsicKind::LtNumLConstR32((), NumberInline32(num))

@@ -2,22 +2,23 @@ use std::env::temp_dir;
 use std::mem::offset_of;
 
 use dash_middle::compiler::instruction::Instruction;
+use dash_middle::compiler::scope::BackLocalId;
 use smallvec::SmallVec;
 
 use crate::Vm;
 use crate::frame::Ip;
 use crate::jit::compiler::backend::{
     PrologueData, REG_ARG1, REG_ARG2, REG_ARG3, REG_ARG4, REG_RETURN32, REG_RETURN64, REG_STACK_RELATIVE, Register,
-    Scale, addsd_reg_mem_disp, addsd_reg_mem_sib, call_reg, cmp_reg_al_imm8, codegen_epilogue, codegen_prologue,
-    decq_mem, incq_mem, je_branch_target, jmp_block, jmp_branch_target, jmp_synthetic_label, jne_synthetic_label,
-    mov_mem_imm32, mov_mem_reg_scaled, mov_reg_imm32, mov_reg_mem, mov_reg_reg, movsd_mem_sib_reg, movsd_reg_mem_disp,
-    movsd_reg_mem_sib, orq_mem_reg, patch_sites_to, register_synthetic_block, register_user_block, seta_reg,
-    test_reg_reg, ucomisd_reg_mem_disp, ucomisd_reg_mem_sib, usable_callee_saved_regs, usable_caller_saved_gprs,
-    usable_fprs, xor_reg_reg,
+    Scale, add_reg_imm, addsd_reg_mem_disp, addsd_reg_mem_sib, call_reg, call_reg_disp, cmp_reg_al_imm8,
+    codegen_epilogue, codegen_prologue, decq_mem, incq_mem, je_branch_target, jmp_block, jmp_branch_target,
+    jmp_synthetic_label, jne_synthetic_label, mov_mem_imm32, mov_mem_reg_scaled, mov_reg_imm32, mov_reg_mem_disp,
+    mov_reg_mem_sib, mov_reg_reg, movsd_mem_sib_reg, movsd_reg_mem_disp, movsd_reg_mem_sib, orq_mem_reg,
+    patch_sites_to, register_synthetic_block, register_user_block, seta_reg, test_reg_reg, ucomisd_reg_mem_disp,
+    ucomisd_reg_mem_sib, usable_callee_saved_regs, usable_caller_saved_gprs, usable_fprs, xor_reg_reg,
 };
 use crate::jit::compiler::codebuffer::CodeBuffer;
 use crate::jit::compiler::jumpresolver::{CpuIp, SyntheticLabel};
-use crate::jit::compiler::offsets::{VecOffsets, get_vec_offsets};
+use crate::jit::compiler::offsets::{VecOffsets, get_sp_offset, get_vec_offsets};
 use crate::jit::dataflow::{DataflowEngine, StmtOrTerminator};
 use crate::jit::ir::{BasicBlockId, Body, BranchTarget, GenericStmt, Stmt, Terminator, ValueSource};
 use crate::jit::mmap::MmapFn;
@@ -61,7 +62,7 @@ impl OpStackLayout {
             (ValueSource::Float(lhs), ValueSource::Float(rhs)) => Self {
                 lhs: ResolvedValueSource::Float(lhs),
                 rhs: ResolvedValueSource::Float(rhs),
-                result_offset: -(size_of::<usize>() as i32),
+                result_offset: 0,
                 len_change: LengthChange::Inc,
             },
             (ValueSource::Float(lhs), ValueSource::Stack) => Self {
@@ -97,6 +98,7 @@ struct CodegenCx<'a> {
     /// Start IP of the codegen region *relative to the full function's bytecode*.
     start: Ip,
     stack_vec_offsets: VecOffsets,
+    sp_field_offset: i32,
     constants: Constants,
     max_stack_depth: usize,
 }
@@ -131,7 +133,7 @@ impl<'a> CodegenCx<'a> {
     fn codegen_handler_stub(&mut self, instr: Instruction, instruction_ip: Ip) {
         // TODO: make all of these methods on CodeBuffer?
         mov_reg_reg(&mut self.buf, REG_ARG1, self.prologue.vm_csreg);
-        mov_reg_mem(
+        mov_reg_mem_disp(
             &mut self.buf,
             REG_ARG2,
             REG_STACK_RELATIVE,
@@ -147,7 +149,7 @@ impl<'a> CodegenCx<'a> {
     fn codegen_ld_stack_base(&mut self, dest: Register) -> usize {
         let stack_ptr_offset = offset_of!(Vm, stack) + self.stack_vec_offsets.ptr;
 
-        mov_reg_mem(
+        mov_reg_mem_disp(
             &mut self.buf,
             dest,
             self.prologue.vm_csreg,
@@ -163,7 +165,7 @@ impl<'a> CodegenCx<'a> {
 
     fn codegen_ld_stack_len(&mut self, dest: Register) {
         let stack_offset = self.stack_base_offset();
-        mov_reg_mem(&mut self.buf, dest, self.prologue.vm_csreg, stack_offset);
+        mov_reg_mem_disp(&mut self.buf, dest, self.prologue.vm_csreg, stack_offset);
     }
 
     fn codegen_u64_rip_offset(&mut self, value: u64, patch_site: u32) {
@@ -210,7 +212,6 @@ impl<'a> CodegenCx<'a> {
 
             match self.body.blocks[block].stmts[stmt] {
                 Stmt::Generic(ref generic_stmt, ip) => match *generic_stmt {
-                    GenericStmt::LdLocal(_) => self.codegen_handler_stub(Instruction::LdLocal, ip),
                     GenericStmt::StoreLocal { .. } => self.codegen_handler_stub(Instruction::StoreLocal, ip),
                     GenericStmt::LtNumLConstR32(_)
                     | GenericStmt::PostfixIncLocalNum(_)
@@ -453,6 +454,60 @@ impl<'a> CodegenCx<'a> {
                     let stack_len_offset = self.stack_base_offset();
                     self.apply_length_change(LengthChange::Dec, stack_len_offset);
                 }
+                Stmt::LdLocal(BackLocalId(local)) => {
+                    /*
+                    - Load stack base into r1
+                    - Load SP into r2
+                    - Load stack length into r3
+                    - Add local onto r2 (sp + local_index)
+                    - mov r2, [r1 + r2 * 8]
+                    - mov [r1 + r3 - 8], r2 ; Push the loaded value onto the stack
+                     */
+                    let stack_index = self.caller_gpr64();
+                    let stack_index32 = stack_index.to_32();
+
+                    mov_reg_mem_disp(
+                        &mut self.buf,
+                        stack_index32,
+                        self.prologue.vm_csreg,
+                        self.sp_field_offset,
+                    );
+                    add_reg_imm(&mut self.buf, stack_index32, local.into());
+
+                    let stack_base = self.caller_gpr64();
+
+                    self.codegen_ld_stack_base(stack_base);
+                    // Just reuse `stack_index` reg since it's not used past this
+                    mov_reg_mem_sib(
+                        &mut self.buf,
+                        stack_index,
+                        stack_base,
+                        stack_index,
+                        Scale::target_pointer_with(),
+                        0,
+                    );
+
+                    let stack_len = self.caller_gpr64();
+                    self.codegen_ld_stack_len(stack_len);
+
+                    // Move result to stack top
+                    mov_mem_reg_scaled(
+                        &mut self.buf,
+                        stack_index,
+                        stack_base,
+                        stack_len,
+                        Scale::target_pointer_with(),
+                        0,
+                    );
+
+                    // Increment stack length
+                    let stack_len_offset = self.stack_base_offset();
+                    self.apply_length_change(LengthChange::Inc, stack_len_offset);
+
+                    self.add_caller_reg(stack_index);
+                    self.add_caller_reg(stack_base);
+                    self.add_caller_reg(stack_len);
+                }
             }
         }
 
@@ -473,21 +528,15 @@ impl<'a> CodegenCx<'a> {
                 pop,
                 condition,
             } => {
-                let check_last_value_fn = self.caller_gpr64();
-
-                mov_reg_mem(
-                    &mut self.buf,
-                    check_last_value_fn,
-                    self.prologue.vtable_csreg,
-                    offset_of!(JitVtable, check_last_value).try_into().unwrap(),
-                );
                 mov_reg_reg(&mut self.buf, REG_ARG1, self.prologue.vm_csreg);
                 mov_reg_imm32(&mut self.buf, REG_ARG2, pop as u32);
                 mov_reg_imm32(&mut self.buf, REG_ARG3, condition as u32);
-                call_reg(&mut self.buf, check_last_value_fn);
+                call_reg_disp(
+                    &mut self.buf,
+                    self.prologue.vtable_csreg,
+                    offset_of!(JitVtable, check_last_value).try_into().unwrap(),
+                );
                 cmp_reg_al_imm8(&mut self.buf, 1);
-
-                self.add_caller_reg(check_last_value_fn);
 
                 je_branch_target(&mut self.buf, true_);
                 jmp_branch_target(&mut self.buf, false_);
@@ -553,6 +602,7 @@ pub fn compile(
         prologue,
         start: start_ip,
         stack_vec_offsets: get_vec_offsets(&scope.stack),
+        sp_field_offset: get_sp_offset(scope).try_into().unwrap(),
         constants: Constants::new(),
         max_stack_depth: 0,
     };
@@ -563,7 +613,7 @@ pub fn compile(
     register_synthetic_block(&mut cx.buf, SyntheticLabel::Exit);
 
     // Set the ip to the end
-    mov_reg_mem(
+    mov_reg_mem_disp(
         &mut cx.buf,
         REG_RETURN64,
         REG_STACK_RELATIVE,

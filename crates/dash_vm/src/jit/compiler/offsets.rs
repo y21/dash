@@ -1,3 +1,7 @@
+use std::mem::offset_of;
+
+use crate::Vm;
+
 #[derive(Debug)]
 pub struct VecOffsets {
     pub ptr: usize,
@@ -50,9 +54,24 @@ pub fn get_vec_offsets<T>(_: &Vec<T>) -> VecOffsets {
     }
 }
 
+/// Returns the offset of the `sp` field relative to the `Vm` struct, in bytes.
+pub fn get_sp_offset(vm: &Vm) -> usize {
+    let sp_field_offset = vm.frames.sp_field_offset();
+    let framestack_offset = offset_of!(Vm, frames);
+
+    framestack_offset + sp_field_offset
+}
+
 #[cfg(test)]
 mod test {
+    use std::ptr::addr_of;
+
+    use dash_middle::compiler::constant::ConstantPool;
+    use dash_middle::compiler::{CompileResult, DebugSymbols};
+    use dash_middle::indexvec::IndexVec;
+
     use crate::Vm;
+    use crate::frame::{Frame, Sp};
     use crate::jit::compiler::offsets::get_vec_offsets;
     use crate::params::VmParams;
     use crate::value::Value;
@@ -75,6 +94,32 @@ mod test {
             );
             assert_eq!(unsafe { *stack_ptr.add(offsets.len).cast::<usize>() }, stack.len());
             assert_eq!(unsafe { *stack_ptr.add(offsets.cap).cast::<usize>() }, stack.capacity());
+        }
+    }
+
+    #[test]
+    fn sp_offset() {
+        let mut vm = Vm::new(VmParams::default());
+
+        vm.frames
+            .push(Frame::from_compile_result(CompileResult {
+                cp: ConstantPool::default(),
+                debug_symbols: DebugSymbols::default(),
+                externals: IndexVec::new(),
+                instructions: Vec::new(),
+                locals: 0,
+                source: "".into(),
+            }))
+            .unwrap();
+
+        let offset = super::get_sp_offset(&vm);
+        eprintln!("{offset:x}");
+        assert!(offset > 0);
+
+        for sp in (0..8).map(Sp) {
+            vm.frames.set_sp(sp);
+            let ptr = unsafe { addr_of!(vm).cast::<u8>().add(offset).cast::<Sp>() };
+            assert_eq!(unsafe { *ptr }, sp);
         }
     }
 }

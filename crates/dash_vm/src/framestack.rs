@@ -80,6 +80,18 @@ impl FrameStack {
         self.current_base().sp
     }
 
+    #[cfg_attr(not(test), expect(unused))]
+    pub fn set_sp(&mut self, sp: Sp) {
+        let base = self.current_base_mut();
+        base.sp = sp;
+    }
+
+    #[cfg_attr(not(feature = "jit"), expect(unused))]
+    pub fn sp_field_offset(&self) -> usize {
+        let sp_ptr = (&raw const self.current_base_ref().sp).addr();
+        sp_ptr - (self as *const Self).addr()
+    }
+
     pub fn current_ip(&self) -> Ip {
         self.current_base().ip
     }

@@ -19,7 +19,6 @@ index_type! {
 #[derive(Debug)]
 #[expect(unused)]
 pub enum GenericStmt {
-    LdLocal(BackLocalId),
     StoreLocal {
         kind: AssignKind,
         local: BackLocalId,
@@ -161,6 +160,7 @@ pub enum Stmt {
         rhs: ValueSource,
     },
     Pop,
+    LdLocal(BackLocalId),
     /// Non-specialized, generic statement, directly lowered from source bytecode
     Generic(GenericStmt, Ip),
 }

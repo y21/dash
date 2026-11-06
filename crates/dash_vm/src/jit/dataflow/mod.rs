@@ -159,7 +159,6 @@ fn value_metadata_from_source(state: &mut BlockState, source: ValueSource) -> Va
 fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
     match *stmt {
         Stmt::Generic(ref stmt, _) => match *stmt {
-            GenericStmt::LdLocal(local) => state.stack.push(state.locals[local].clone()),
             GenericStmt::LtNumLConstR32(_) => {
                 state.stack.pop().unwrap();
                 state.stack.push(ValueMetadata { ty: ValueType::Boolean });
@@ -459,6 +458,7 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
             state.stack.push(out_ty);
         }
         Stmt::Pop => drop(state.stack.pop().unwrap()),
+        Stmt::LdLocal(local) => state.stack.push(state.locals[local].clone()),
     }
 }
 
