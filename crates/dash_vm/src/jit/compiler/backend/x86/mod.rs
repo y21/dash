@@ -45,6 +45,8 @@ mod opcodes {
     pub const XOR: u8 = 0x31;
     pub const SETA_RM8: &[u8] = &[0x0F, 0x97];
     pub const OR_R_RM: u8 = 0x0B;
+    pub const AND_R_IMM8: u8 = 0x83;
+    pub const AND_R_IMM32: u8 = 0x81;
     pub const INT3: u8 = 0xCC;
 }
 
@@ -628,6 +630,21 @@ pub fn add_reg_imm(buf: &mut CodeBuffer, reg: Register, imm: i32) {
     }
 }
 
+pub fn and_reg_imm(buf: &mut CodeBuffer, reg: Register, imm: i32) {
+    let mut encoding = encode_modrm_reg_reg(RegField::Bits(4), reg);
+    if reg.size_bits() == 64 {
+        encoding.rex |= Rex::W;
+    }
+
+    if let Ok(num) = i8::try_from(imm) {
+        encoding.write_into(buf, &[opcodes::AND_R_IMM8]);
+        buf.push(num.cast_unsigned());
+    } else {
+        encoding.write_into(buf, &[opcodes::AND_R_IMM32]);
+        buf.extend_from_slice(&imm.to_le_bytes());
+    }
+}
+
 #[expect(unused)] // for debugging
 pub fn int3(buf: &mut CodeBuffer) {
     buf.push(opcodes::INT3);
@@ -1087,6 +1104,20 @@ mod tests {
         });
         assert_enc(&[0x81, 0xC0, 0x7F, 0xFF, 0xFF, 0xFF], |b| {
             add_reg_imm(b, Register::Eax, -129)
+        });
+    }
+
+    #[test]
+    fn enc_and_reg_imm() {
+        // 64-bit register: imm8 and imm32 encodings.
+        assert_enc(&[0x48, 0x83, 0xE0, 0x08], |b| and_reg_imm(b, Register::Rax, 8));
+        assert_enc(&[0x48, 0x81, 0xE0, 0x00, 0x01, 0x00, 0x00], |b| {
+            and_reg_imm(b, Register::Rax, 256)
+        });
+        // 32-bit register: imm8 and imm32 encodings omit REX.W.
+        assert_enc(&[0x83, 0xE0, 0x08], |b| and_reg_imm(b, Register::Eax, 8));
+        assert_enc(&[0x81, 0xE0, 0x00, 0x01, 0x00, 0x00], |b| {
+            and_reg_imm(b, Register::Eax, 256)
         });
     }
 

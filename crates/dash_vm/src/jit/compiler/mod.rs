@@ -9,7 +9,7 @@ use crate::Vm;
 use crate::frame::Ip;
 use crate::jit::compiler::backend::{
     PrologueData, REG_ARG1, REG_ARG2, REG_ARG3, REG_ARG4, REG_RETURN32, REG_RETURN64, REG_STACK_RELATIVE, Register,
-    Scale, add_reg_imm, addsd_reg_mem_disp, addsd_reg_mem_sib, call_reg, call_reg_disp, cmp_reg_al_imm8,
+    Scale, add_reg_imm, addsd_reg_mem_disp, addsd_reg_mem_sib, and_reg_imm, call_reg, call_reg_disp, cmp_reg_al_imm8,
     codegen_epilogue, codegen_prologue, decq_mem, incq_mem, je_branch_target, jmp_block, jmp_branch_target,
     jmp_synthetic_label, jne_synthetic_label, mov_mem_imm32, mov_mem_reg_scaled, mov_reg_imm32, mov_reg_mem_disp,
     mov_reg_mem_sib, mov_reg_reg, movsd_mem_sib_reg, movsd_reg_mem_disp, movsd_reg_mem_sib, orq_mem_reg,
@@ -20,7 +20,10 @@ use crate::jit::compiler::codebuffer::CodeBuffer;
 use crate::jit::compiler::jumpresolver::{CpuIp, SyntheticLabel};
 use crate::jit::compiler::offsets::{VecOffsets, get_sp_offset, get_vec_offsets};
 use crate::jit::dataflow::{DataflowEngine, StmtOrTerminator};
-use crate::jit::ir::{BasicBlockId, Body, BranchTarget, GenericStmt, Stmt, Terminator, ValueSource};
+use crate::jit::ir::{
+    BasicBlockId, Body, BranchTarget, ConditionalGotoCondition, ConditionalGotoPopPolicy, GenericStmt, Stmt,
+    Terminator, ValueSource,
+};
 use crate::jit::mmap::MmapFn;
 use crate::jit::{JitOutData, JitVtable};
 use crate::localscope::LocalScope;
@@ -514,6 +517,16 @@ impl<'a> CodegenCx<'a> {
         let terminator = self.body.blocks[block].terminator();
         let before_terminator_state = cursor.seek_to_before(self.body, StmtOrTerminator::Terminator);
         self.max_stack_depth = self.max_stack_depth.max(before_terminator_state.stack.len());
+
+        self.codegen_terminator(terminator);
+
+        let after_terminator_state = cursor.seek_to_before(self.body, StmtOrTerminator::PostTerminator);
+        self.max_stack_depth = self.max_stack_depth.max(after_terminator_state.stack.len());
+
+        // NB: at this point, we've generated code for the successor blocks, so don't do anything block-specific here.
+    }
+
+    fn codegen_terminator(&mut self, terminator: &Terminator) {
         match *terminator {
             Terminator::Goto(target) => match target {
                 BranchTarget::Block(target) => {
@@ -528,32 +541,86 @@ impl<'a> CodegenCx<'a> {
                 pop,
                 condition,
             } => {
-                mov_reg_reg(&mut self.buf, REG_ARG1, self.prologue.vm_csreg);
-                mov_reg_imm32(&mut self.buf, REG_ARG2, pop as u32);
-                mov_reg_imm32(&mut self.buf, REG_ARG3, condition as u32);
-                call_reg_disp(
-                    &mut self.buf,
-                    self.prologue.vtable_csreg,
-                    offset_of!(JitVtable, check_last_value).try_into().unwrap(),
-                );
-                cmp_reg_al_imm8(&mut self.buf, 1);
+                match condition {
+                    ConditionalGotoCondition::IsTrue | ConditionalGotoCondition::IsFalse => {
+                        let stack_base = self.caller_gpr64();
+                        let stack_len = self.caller_gpr64();
+                        let testreg = self.caller_gpr64();
 
-                je_branch_target(&mut self.buf, true_);
-                jmp_branch_target(&mut self.buf, false_);
+                        self.codegen_ld_stack_base(stack_base);
 
-                if let BranchTarget::Block(target) = true_ {
-                    self.codegen_block(target);
-                }
-                if let BranchTarget::Block(target) = false_ {
-                    self.codegen_block(target);
+                        self.codegen_ld_stack_len(stack_len);
+
+                        mov_reg_mem_sib(
+                            &mut self.buf,
+                            testreg,
+                            stack_base,
+                            stack_len,
+                            Scale::target_pointer_with(),
+                            -i32::try_from(size_of::<usize>()).unwrap(),
+                        );
+
+                        match pop {
+                            ConditionalGotoPopPolicy::Pop => {
+                                self.apply_length_change(LengthChange::Dec, self.stack_base_offset())
+                            }
+                            ConditionalGotoPopPolicy::Peek => {}
+                        }
+
+                        let true_mask = i32::try_from(Value::TRUE.raw() & !Value::BOOLEAN_MASK).unwrap();
+
+                        and_reg_imm(&mut self.buf, testreg, true_mask);
+                        match condition {
+                            ConditionalGotoCondition::IsFalse => {
+                                je_branch_target(&mut self.buf, true_);
+                                jmp_branch_target(&mut self.buf, false_);
+                            }
+                            ConditionalGotoCondition::IsTrue => {
+                                je_branch_target(&mut self.buf, false_);
+                                jmp_branch_target(&mut self.buf, true_);
+                            }
+                            _ => unreachable!(),
+                        }
+
+                        self.add_caller_reg(stack_base);
+                        self.add_caller_reg(stack_len);
+                        self.add_caller_reg(testreg);
+
+                        if let BranchTarget::Block(target) = true_ {
+                            self.codegen_block(target);
+                        }
+                        if let BranchTarget::Block(target) = false_ {
+                            self.codegen_block(target);
+                        }
+                    }
+                    ConditionalGotoCondition::IsFalsy
+                    | ConditionalGotoCondition::IsTruthy
+                    | ConditionalGotoCondition::IsUndefined
+                    | ConditionalGotoCondition::IsNullish => {
+                        // Fallback
+
+                        mov_reg_reg(&mut self.buf, REG_ARG1, self.prologue.vm_csreg);
+                        mov_reg_imm32(&mut self.buf, REG_ARG2, pop as u32);
+                        mov_reg_imm32(&mut self.buf, REG_ARG3, condition as u32);
+                        call_reg_disp(
+                            &mut self.buf,
+                            self.prologue.vtable_csreg,
+                            offset_of!(JitVtable, check_last_value).try_into().unwrap(),
+                        );
+                        cmp_reg_al_imm8(&mut self.buf, 1);
+                        je_branch_target(&mut self.buf, true_);
+                        jmp_branch_target(&mut self.buf, false_);
+
+                        if let BranchTarget::Block(target) = true_ {
+                            self.codegen_block(target);
+                        }
+                        if let BranchTarget::Block(target) = false_ {
+                            self.codegen_block(target);
+                        }
+                    }
                 }
             }
         }
-
-        let after_terminator_state = cursor.seek_to_before(self.body, StmtOrTerminator::PostTerminator);
-        self.max_stack_depth = self.max_stack_depth.max(after_terminator_state.stack.len());
-
-        // NB: at this point, we've generated code for the successor blocks, so don't do anything block-specific here.
     }
 
     fn codegen_body(&mut self) {

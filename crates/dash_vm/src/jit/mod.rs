@@ -20,6 +20,7 @@ mod mmap;
 mod passes;
 mod state;
 
+use dash_log::debug;
 use dash_middle::compiler::constant::ConstantPool;
 use dash_middle::compiler::extract::{ExtractSource, extract_back_infallible};
 use dash_middle::compiler::instruction::Instruction;
@@ -154,6 +155,8 @@ extern "C" fn check_last_value(
 
     match condition {
         ConditionalGotoCondition::IsFalsy => !value.is_truthy(vm),
+        ConditionalGotoCondition::IsFalse => matches!(value.unpack(), ValueKind::Boolean(false)),
+        ConditionalGotoCondition::IsTrue => matches!(value.unpack(), ValueKind::Boolean(true)),
         ConditionalGotoCondition::IsTruthy => value.is_truthy(vm),
         ConditionalGotoCondition::IsNullish => value.is_nullish(),
         ConditionalGotoCondition::IsUndefined => matches!(value.unpack(), ValueKind::Undefined(_)),
@@ -184,6 +187,8 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Re
             let mut body = ir::lower_body(bytecode, scope)?;
             let mut dataflow = dataflow::DataflowEngine::compute(&body, scope);
             passes::run(&mut body, &mut dataflow);
+
+            debug!("{body:#?}");
 
             let CompileResult { func, max_stack_depth } = compiler::compile(&body, start, end, &dataflow, scope);
 

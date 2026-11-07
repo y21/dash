@@ -181,9 +181,17 @@ pub enum ConditionalGotoPopPolicy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub enum ConditionalGotoCondition {
+    /// Any falsy value
     IsFalsy,
+    /// Any truthy value
     IsTruthy,
+    /// The true value
+    IsTrue,
+    /// The false value
+    IsFalse,
+    /// Any nullish value (null or undefined)
     IsNullish,
+    /// The undefined value
     IsUndefined,
 }
 
@@ -234,6 +242,9 @@ impl BasicBlock {
     }
     pub fn terminator(&self) -> &Terminator {
         self.terminator.as_ref().unwrap()
+    }
+    pub fn terminator_mut(&mut self) -> &mut Terminator {
+        self.terminator.as_mut().unwrap()
     }
 }
 

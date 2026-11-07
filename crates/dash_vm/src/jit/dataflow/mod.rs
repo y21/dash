@@ -563,8 +563,8 @@ pub struct DataflowBlockCursorMut<'a> {
 }
 
 impl<'a> DataflowBlockCursorMut<'a> {
-    pub fn seek_to_before(&mut self, body: &Body, stmt: StmtId) -> &BlockState {
-        self.cursor.seek_to_before(body, StmtOrTerminator::Stmt(stmt));
+    pub fn seek_to_before(&mut self, body: &Body, to: StmtOrTerminator) -> &BlockState {
+        self.cursor.seek_to_before(body, to);
         &self.cursor.state
     }
 

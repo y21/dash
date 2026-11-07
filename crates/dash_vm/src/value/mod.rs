@@ -114,6 +114,9 @@ impl Value {
     pub(crate) const OBJECT_MASK: u64 = 0b1_11111111111_1110 << (64 - 16);
     pub(crate) const EXTERNAL_MASK: u64 = 0b0_11111111111_1111 << (64 - 16);
 
+    pub const TRUE: Self = Self::boolean(true);
+    pub const FALSE: Self = Self::boolean(false);
+
     pub fn number(v: f64) -> Self {
         #[cold]
         #[inline(never)]
@@ -128,11 +131,11 @@ impl Value {
         Self(bits)
     }
 
-    pub fn raw(self) -> u64 {
+    pub const fn raw(self) -> u64 {
         self.0
     }
 
-    pub fn boolean(b: bool) -> Self {
+    pub const fn boolean(b: bool) -> Self {
         Self(Self::BOOLEAN_MASK | b as u64)
     }
 
