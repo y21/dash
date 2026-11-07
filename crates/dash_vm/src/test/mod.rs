@@ -721,3 +721,209 @@ simple_test!(
     ",
     Value::undefined()
 );
+
+// JIT tests
+
+macro_rules! jit_test {
+    ($name:ident, $code:expr) => {
+        #[cfg(feature = "jit")]
+        simple_test!($name, $code, Value::undefined());
+    };
+}
+
+jit_test!(
+    jit_loop_break,
+    "
+    let i = 0;
+    for (; i < 1000; i++) {}
+    assert(i === 1000);
+    "
+);
+
+jit_test!(
+    jit_numeric_operators,
+    "
+    let result;
+    for (let i = 0; i < 300; i++) {
+        let add = i + 3;
+        let sub = i - 3;
+        let mul = i * 2;
+        let div = i / 2;
+        let rem = i % 7;
+        let pow = 2 ** (i % 4);
+        let or = i | 1;
+        let xor = i ^ 15;
+        let and = i & 255;
+        let shl = (i % 8) << 2;
+        let shr = (i % 32) >> 1;
+        let ushr = (i % 32) >>> 1;
+        let neg = -i;
+        let pos = +i;
+        let bitnot = ~i;
+        result = [add, sub, mul, div, rem, pow, or, xor, and, shl, shr, ushr, neg, pos, bitnot];
+    }
+    assert(result[0] === 302 && result[1] === 296);
+    assert(result[2] === 598 && result[3] === 149.5);
+    assert(result[4] === 5 && result[5] === 8);
+    assert(result[6] === 299 && result[7] === (299 ^ 15) && result[8] === 43);
+    assert(result[9] === 12 && result[10] === 5 && result[11] === 5);
+    assert(result[12] === -299 && result[13] === 299 && result[14] === -300);
+    "
+);
+
+jit_test!(
+    jit_comparisons_and_compound_assignments,
+    "
+    let comparisons;
+    let updated;
+    for (let i = 0; i < 300; i++) {
+        comparisons = [
+            i > 100, i >= 299, i < 300, i <= 299,
+            i == 299, i != 298, i === 299, i !== 298,
+            !i, typeof i === 'number'
+        ];
+
+        let n = i;
+        n += 2;
+        n -= 1;
+        n *= 2;
+        n /= 2;
+        n %= 10;
+        n **= 1;
+        n <<= 1;
+        n >>= 1;
+        n >>>= 1;
+        n |= 1;
+        n ^= 3;
+        n &= 255;
+        n++;
+        ++n;
+        n--;
+        --n;
+        updated = n;
+    }
+    assert(comparisons[0] && comparisons[1] && comparisons[2] && comparisons[3]);
+    assert(comparisons[4] && comparisons[5] && comparisons[6] && comparisons[7]);
+    assert(!comparisons[8] && comparisons[9]);
+    assert(updated === 2);
+    "
+);
+
+jit_test!(
+    jit_globals_closures_and_calls,
+    "
+    let globalCount = 1;
+    function twice(value) { return value * 2; }
+
+    function run() {
+        let captured = 5;
+        let sum = 0;
+        function inner() {
+            for (let i = 0; i < 300; i++) {
+                globalCount += i;
+                captured += i;
+                sum += globalCount + captured + twice(i);
+                if (globalCount > 100000) globalCount = 1;
+            }
+        }
+        inner();
+        return [captured, sum];
+    }
+
+    let result = run();
+    assert(globalCount === 44851);
+    assert(result[0] === 44855);
+    assert(typeof result[1] === 'number');
+    "
+);
+
+jit_test!(
+    jit_this_literals_types_and_calls,
+    "
+    function loopWithThis() {
+        let values;
+        for (let i = 0; i < 300; i++) {
+            let value = i + 1;
+            this.total += id(value);
+            values = [
+                typeof value, !value, null, undefined,
+                true, false, 'hello', 1.5
+            ];
+        }
+        return values;
+    }
+
+    function id(value) { return value; }
+    let object = { total: 0, loop: loopWithThis };
+    let values = object.loop();
+    assert(object.total === 45150);
+    assert(values[0] === 'number' && values[1] === false);
+    assert(values[2] === null && values[3] === undefined);
+    assert(values[4] === true && values[5] === false);
+    assert(values[6] === 'hello' && values[7] === 1.5);
+    "
+);
+
+jit_test!(
+    jit_static_and_dynamic_property_updates,
+    "
+    let object = { staticValue: 0, dynamicValue: 0 };
+    for (let i = 0; i < 300; i++) {
+        object.staticValue = i;
+        object.staticValue += 3;
+        object.staticValue -= 1;
+        object.staticValue *= 2;
+        object.staticValue /= 2;
+        object.staticValue %= 7;
+        object.staticValue **= 1;
+        object.staticValue <<= 1;
+        object.staticValue >>= 1;
+        object.staticValue >>>= 1;
+        object.staticValue |= 1;
+        object.staticValue ^= 2;
+        object.staticValue &= 1023;
+        object.staticValue++;
+        ++object.staticValue;
+        object.staticValue--;
+        --object.staticValue;
+
+        object['dynamicValue'] = i;
+        object['dynamicValue'] += 3;
+        object['dynamicValue'] -= 1;
+        object['dynamicValue'] *= 2;
+        object['dynamicValue'] /= 2;
+        object['dynamicValue'] %= 7;
+        object['dynamicValue'] **= 1;
+        object['dynamicValue'] <<= 1;
+        object['dynamicValue'] >>= 1;
+        object['dynamicValue'] >>>= 1;
+        object['dynamicValue'] |= 1;
+        object['dynamicValue'] ^= 2;
+        object['dynamicValue'] &= 1023;
+        object['dynamicValue']++;
+        ++object['dynamicValue'];
+        object['dynamicValue']--;
+        --object['dynamicValue'];
+    }
+    assert(object.staticValue === 3);
+    assert(object.dynamicValue === 3);
+    "
+);
+
+jit_test!(
+    jit_debugger_and_exception,
+    "
+    let i = 0;
+    let caught;
+    try {
+        for (; i < 300; i++) {
+            debugger;
+            if (i === 200) throw 'boom';
+        }
+    } catch (error) {
+        caught = error;
+    }
+    assert(i === 200);
+    assert(caught === 'boom');
+    "
+);
