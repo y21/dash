@@ -9,7 +9,8 @@ use dash_middle::indexvec::IndexVec;
 use crate::jit::dataflow::join::{Join, JoinChange, join_slice};
 use crate::jit::dataflow::value::{ValueMetadata, ValueType};
 use crate::jit::ir::{
-    BasicBlockId, Body, BranchTarget, ConditionalGotoPopPolicy, GenericStmt, Stmt, StmtId, Terminator, ValueSource,
+    BasicBlockId, Body, BranchTarget, ConditionalGotoPopPolicy, GenericStmt, Stmt, StmtId, Terminator,
+    UncheckedAssignmentKind, ValueSource,
 };
 use crate::localscope::LocalScope;
 use crate::value::{Unpack, ValueKind};
@@ -459,6 +460,13 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
         }
         Stmt::Pop => drop(state.stack.pop().unwrap()),
         Stmt::LdLocal(local) => state.stack.push(state.locals[local].clone()),
+        Stmt::UncheckedStoreLocal { kind, local } => match kind {
+            UncheckedAssignmentKind::NumberPostfixIncrement => {
+                let local = state.locals[local];
+                assert!(local.ty == ValueType::Number);
+                state.stack.push(local);
+            }
+        },
     }
 }
 

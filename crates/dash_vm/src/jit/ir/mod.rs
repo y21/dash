@@ -148,6 +148,11 @@ pub enum ValueSource {
     Stack,
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum UncheckedAssignmentKind {
+    NumberPostfixIncrement,
+}
+
 #[derive(Debug)]
 pub enum Stmt {
     /// Adds two numbers without any type checks.
@@ -161,6 +166,10 @@ pub enum Stmt {
     },
     Pop,
     LdLocal(BackLocalId),
+    UncheckedStoreLocal {
+        kind: UncheckedAssignmentKind,
+        local: BackLocalId,
+    },
     /// Non-specialized, generic statement, directly lowered from source bytecode
     Generic(GenericStmt, Ip),
 }

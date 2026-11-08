@@ -22,7 +22,7 @@ use crate::jit::compiler::offsets::{VecOffsets, get_sp_offset, get_vec_offsets};
 use crate::jit::dataflow::{DataflowEngine, StmtOrTerminator};
 use crate::jit::ir::{
     BasicBlockId, Body, BranchTarget, ConditionalGotoCondition, ConditionalGotoPopPolicy, GenericStmt, Stmt,
-    Terminator, ValueSource,
+    Terminator, UncheckedAssignmentKind, ValueSource,
 };
 use crate::jit::mmap::MmapFn;
 use crate::jit::{JitOutData, JitVtable};
@@ -162,12 +162,12 @@ impl<'a> CodegenCx<'a> {
         stack_ptr_offset
     }
 
-    fn stack_base_offset(&self) -> i32 {
+    fn stack_len_offset(&self) -> i32 {
         (offset_of!(Vm, stack) + self.stack_vec_offsets.len) as i32
     }
 
     fn codegen_ld_stack_len(&mut self, dest: Register) {
-        let stack_offset = self.stack_base_offset();
+        let stack_offset = self.stack_len_offset();
         mov_reg_mem_disp(&mut self.buf, dest, self.prologue.vm_csreg, stack_offset);
     }
 
@@ -200,6 +200,17 @@ impl<'a> CodegenCx<'a> {
             }
             LengthChange::None => {}
         }
+    }
+
+    fn codegen_local_stack_index(&mut self, BackLocalId(local): BackLocalId, stack_index: Register) {
+        let stack_index32 = stack_index.to_32();
+        mov_reg_mem_disp(
+            &mut self.buf,
+            stack_index32,
+            self.prologue.vm_csreg,
+            self.sp_field_offset,
+        );
+        add_reg_imm(&mut self.buf, stack_index32, local.into());
     }
 
     fn codegen_block(&mut self, block: BasicBlockId) {
@@ -372,7 +383,7 @@ impl<'a> CodegenCx<'a> {
                         result_offset,
                     );
 
-                    let stack_len_offset = self.stack_base_offset();
+                    let stack_len_offset = self.stack_len_offset();
                     self.apply_length_change(len_change, stack_len_offset);
 
                     self.add_fpr(fpr);
@@ -446,7 +457,7 @@ impl<'a> CodegenCx<'a> {
                         result_offset,
                     );
 
-                    let stack_len_offset = self.stack_base_offset();
+                    let stack_len_offset = self.stack_len_offset();
                     self.apply_length_change(len_change, stack_len_offset);
 
                     self.add_fpr(fpr);
@@ -454,33 +465,17 @@ impl<'a> CodegenCx<'a> {
                     self.add_caller_reg(stack_ptr_reg);
                 }
                 Stmt::Pop => {
-                    let stack_len_offset = self.stack_base_offset();
+                    let stack_len_offset = self.stack_len_offset();
                     self.apply_length_change(LengthChange::Dec, stack_len_offset);
                 }
-                Stmt::LdLocal(BackLocalId(local)) => {
-                    /*
-                    - Load stack base into r1
-                    - Load SP into r2
-                    - Load stack length into r3
-                    - Add local onto r2 (sp + local_index)
-                    - mov r2, [r1 + r2 * 8]
-                    - mov [r1 + r3 - 8], r2 ; Push the loaded value onto the stack
-                     */
-                    let stack_index = self.caller_gpr64();
-                    let stack_index32 = stack_index.to_32();
-
-                    mov_reg_mem_disp(
-                        &mut self.buf,
-                        stack_index32,
-                        self.prologue.vm_csreg,
-                        self.sp_field_offset,
-                    );
-                    add_reg_imm(&mut self.buf, stack_index32, local.into());
-
+                Stmt::LdLocal(local) => {
                     let stack_base = self.caller_gpr64();
+                    let stack_index = self.caller_gpr64();
+                    let stack_len = self.caller_gpr64();
 
                     self.codegen_ld_stack_base(stack_base);
-                    // Just reuse `stack_index` reg since it's not used past this
+                    self.codegen_local_stack_index(local, stack_index);
+
                     mov_reg_mem_sib(
                         &mut self.buf,
                         stack_index,
@@ -490,7 +485,6 @@ impl<'a> CodegenCx<'a> {
                         0,
                     );
 
-                    let stack_len = self.caller_gpr64();
                     self.codegen_ld_stack_len(stack_len);
 
                     // Move result to stack top
@@ -504,13 +498,54 @@ impl<'a> CodegenCx<'a> {
                     );
 
                     // Increment stack length
-                    let stack_len_offset = self.stack_base_offset();
+                    let stack_len_offset = self.stack_len_offset();
                     self.apply_length_change(LengthChange::Inc, stack_len_offset);
 
                     self.add_caller_reg(stack_index);
                     self.add_caller_reg(stack_base);
                     self.add_caller_reg(stack_len);
                 }
+                Stmt::UncheckedStoreLocal { kind, local } => match kind {
+                    UncheckedAssignmentKind::NumberPostfixIncrement => {
+                        let stack_base = self.caller_gpr64();
+                        let stack_index = self.caller_gpr64();
+                        let stack_len = self.caller_gpr64();
+
+                        // Load value from stack variable slot
+                        self.codegen_ld_stack_base(stack_base);
+                        self.codegen_local_stack_index(local, stack_index);
+
+                        movsd_reg_mem_sib(
+                            &mut self.buf,
+                            // TODO: dont hardcode xmm0
+                            Register::Xmm0,
+                            stack_base,
+                            stack_index,
+                            Scale::target_pointer_with(),
+                            0,
+                        );
+
+                        // Increment
+                        let patch_site = addsd_reg_mem_disp(&mut self.buf, Register::Xmm0, Register::Rip, 0);
+                        self.codegen_f64_rip_offset(1.0, patch_site);
+
+                        // Write back result
+                        self.codegen_ld_stack_len(stack_len);
+                        movsd_mem_sib_reg(
+                            &mut self.buf,
+                            Register::Xmm0,
+                            stack_base,
+                            stack_index,
+                            Scale::target_pointer_with(),
+                            0,
+                        );
+                        self.apply_length_change(LengthChange::Inc, self.stack_len_offset());
+
+                        self.add_caller_reg(stack_index);
+                        self.add_caller_reg(stack_base);
+                        self.add_caller_reg(stack_len);
+                    }
+                },
             }
         }
 
@@ -562,7 +597,7 @@ impl<'a> CodegenCx<'a> {
 
                         match pop {
                             ConditionalGotoPopPolicy::Pop => {
-                                self.apply_length_change(LengthChange::Dec, self.stack_base_offset())
+                                self.apply_length_change(LengthChange::Dec, self.stack_len_offset())
                             }
                             ConditionalGotoPopPolicy::Peek => {}
                         }

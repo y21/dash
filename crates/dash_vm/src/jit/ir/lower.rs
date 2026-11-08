@@ -23,7 +23,7 @@ use rustc_hash::FxHashMap;
 use crate::frame::Ip;
 use crate::jit::ir::{
     BasicBlock, BasicBlockId, Body, BranchTarget, ConditionalGotoCondition, ConditionalGotoPopPolicy, GenericStmt,
-    Stmt, Terminator, ValueSource,
+    Stmt, Terminator, UncheckedAssignmentKind, ValueSource,
 };
 use crate::jit::{BufferRef, CompileError, NoValueExtractContext};
 use crate::localscope::LocalScope;
@@ -107,7 +107,10 @@ fn lower_from_ip(
                     });
                 }
                 IntrinsicKind::PostfixIncLocalNum(local) => {
-                    stmts.push(Stmt::Generic(GenericStmt::PostfixIncLocalNum(local), instr_ip));
+                    stmts.push(Stmt::UncheckedStoreLocal {
+                        kind: UncheckedAssignmentKind::NumberPostfixIncrement,
+                        local,
+                    });
                 }
                 IntrinsicKind::PostfixDecLocalNum(local) => {
                     stmts.push(Stmt::Generic(GenericStmt::PostfixDecLocalNum(local), instr_ip));
