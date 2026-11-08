@@ -56,9 +56,9 @@ use std::ops::BitOrAssign;
 use arrayvec::ArrayVec;
 
 use crate::jit::JitVtable;
-use crate::jit::compiler::backend::x86::register::Register;
-use crate::jit::compiler::codebuffer::CodeBuffer;
-use crate::jit::compiler::jumpresolver::{CpuIp, PatchData, SyntheticLabel};
+use crate::jit::codegen::backend::x86::register::Register;
+use crate::jit::codegen::codebuffer::CodeBuffer;
+use crate::jit::codegen::jumpresolver::{CpuIp, PatchData, SyntheticLabel};
 use crate::jit::ir::BasicBlockId;
 
 pub mod register;

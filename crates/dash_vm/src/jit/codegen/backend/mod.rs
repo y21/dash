@@ -13,8 +13,8 @@ pub use x86::{
     ucomisd_reg_mem_sib, xor_reg_reg,
 };
 
-use crate::jit::compiler::codebuffer::CodeBuffer;
-use crate::jit::compiler::jumpresolver::SyntheticLabel;
+use crate::jit::codegen::codebuffer::CodeBuffer;
+use crate::jit::codegen::jumpresolver::SyntheticLabel;
 use crate::jit::ir::BranchTarget;
 
 pub fn je_branch_target(buf: &mut CodeBuffer, target: BranchTarget) {

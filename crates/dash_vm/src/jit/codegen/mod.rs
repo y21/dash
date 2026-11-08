@@ -7,7 +7,7 @@ use smallvec::SmallVec;
 
 use crate::Vm;
 use crate::frame::Ip;
-use crate::jit::compiler::backend::{
+use crate::jit::codegen::backend::{
     PrologueData, REG_ARG1, REG_ARG2, REG_ARG3, REG_ARG4, REG_RETURN32, REG_RETURN64, REG_STACK_RELATIVE, Register,
     Scale, add_reg_imm, addsd_reg_mem_disp, addsd_reg_mem_sib, and_reg_imm, call_reg, call_reg_disp, cmp_reg_al_imm8,
     codegen_epilogue, codegen_prologue, decq_mem, incq_mem, je_branch_target, jmp_block, jmp_branch_target,
@@ -16,9 +16,9 @@ use crate::jit::compiler::backend::{
     patch_sites_to, register_synthetic_block, register_user_block, seta_reg, test_reg_reg, ucomisd_reg_mem_disp,
     ucomisd_reg_mem_sib, usable_callee_saved_regs, usable_caller_saved_gprs, usable_fprs, xor_reg_reg,
 };
-use crate::jit::compiler::codebuffer::CodeBuffer;
-use crate::jit::compiler::jumpresolver::{CpuIp, SyntheticLabel};
-use crate::jit::compiler::offsets::{VecOffsets, get_sp_offset, get_vec_offsets};
+use crate::jit::codegen::codebuffer::CodeBuffer;
+use crate::jit::codegen::jumpresolver::{CpuIp, SyntheticLabel};
+use crate::jit::codegen::offsets::{VecOffsets, get_sp_offset, get_vec_offsets};
 use crate::jit::dataflow::{DataflowEngine, StmtOrTerminator};
 use crate::jit::ir::{
     BasicBlockId, Body, BranchTarget, ConditionalGotoCondition, ConditionalGotoPopPolicy, GenericStmt, Stmt,
@@ -518,7 +518,6 @@ impl<'a> CodegenCx<'a> {
 
                         movsd_reg_mem_sib(
                             &mut self.buf,
-                            // TODO: dont hardcode xmm0
                             fpr,
                             stack_base,
                             stack_index,

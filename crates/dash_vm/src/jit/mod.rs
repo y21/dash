@@ -7,13 +7,13 @@ use std::rc::Rc;
 use crate::Vm;
 use crate::dispatch::{DispatchContext, INSTRUCTION_LUT};
 use crate::frame::Ip;
-use crate::jit::compiler::CompileResult;
+use crate::jit::codegen::CompileResult;
 use crate::jit::ir::{ConditionalGotoCondition, ConditionalGotoPopPolicy};
 use crate::jit::mmap::MmapFn;
 use crate::localscope::LocalScope;
 use crate::value::{Unpack, Unrooted, ValueKind};
 
-mod compiler;
+mod codegen;
 mod dataflow;
 mod ir;
 mod mmap;
@@ -190,7 +190,7 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Re
 
             debug!("{body:#?}");
 
-            let CompileResult { func, max_stack_depth } = compiler::compile(&body, start, end, &dataflow, scope);
+            let CompileResult { func, max_stack_depth } = codegen::compile(&body, start, end, &dataflow, scope);
 
             Ok(JitFnHandle(Rc::new(InnerJitFnHandle { func, max_stack_depth })))
         })?;

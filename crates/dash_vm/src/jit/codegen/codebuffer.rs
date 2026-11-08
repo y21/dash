@@ -1,4 +1,4 @@
-use crate::jit::compiler::jumpresolver::{CpuIp, JumpResolver};
+use crate::jit::codegen::jumpresolver::{CpuIp, JumpResolver};
 use crate::jit::ir::Body;
 
 pub struct CodeBuffer {

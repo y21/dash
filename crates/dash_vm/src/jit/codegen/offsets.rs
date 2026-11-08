@@ -72,7 +72,7 @@ mod test {
 
     use crate::Vm;
     use crate::frame::{Frame, Sp};
-    use crate::jit::compiler::offsets::get_vec_offsets;
+    use crate::jit::codegen::offsets::get_vec_offsets;
     use crate::params::VmParams;
     use crate::value::Value;
 
