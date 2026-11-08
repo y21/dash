@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794143034890,
+  "lastUpdate": 1794143323609,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -13931,6 +13931,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 19447170,
             "range": "± 144628",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "0686c2cf94b0cd94c3a691bcd3f81370065262cf",
+          "message": "jit: specialize postfix increment",
+          "timestamp": "2026-11-08T14:04:12+01:00",
+          "tree_id": "1c741f8626c02696087d5a812ddf3283cb4ca737",
+          "url": "https://github.com/y21/dash/commit/0686c2cf94b0cd94c3a691bcd3f81370065262cf"
+        },
+        "date": 1794143322360,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 991286,
+            "range": "± 27914",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 112433,
+            "range": "± 411",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 53194,
+            "range": "± 251",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1381334,
+            "range": "± 18551",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 18137208,
+            "range": "± 95030",
             "unit": "ns/iter"
           }
         ]
