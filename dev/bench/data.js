@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794143323609,
+  "lastUpdate": 1794145945463,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -13985,6 +13985,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 18137208,
             "range": "± 95030",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "00f5aac721792ec2117ceeddae92e4fcf155f3d9",
+          "message": "jit: move compiler -> codegen",
+          "timestamp": "2026-11-08T14:47:58+01:00",
+          "tree_id": "fd2267090e3b089d74e3220d1e69b94e80e4b7cc",
+          "url": "https://github.com/y21/dash/commit/00f5aac721792ec2117ceeddae92e4fcf155f3d9"
+        },
+        "date": 1794145944752,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1285184,
+            "range": "± 10116",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 148303,
+            "range": "± 3018",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 74235,
+            "range": "± 374",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1690520,
+            "range": "± 17657",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 25442577,
+            "range": "± 154070",
             "unit": "ns/iter"
           }
         ]
