@@ -510,6 +510,7 @@ impl<'a> CodegenCx<'a> {
                         let stack_base = self.caller_gpr64();
                         let stack_index = self.caller_gpr64();
                         let stack_len = self.caller_gpr64();
+                        let fpr = self.fpr();
 
                         // Load value from stack variable slot
                         self.codegen_ld_stack_base(stack_base);
@@ -518,7 +519,7 @@ impl<'a> CodegenCx<'a> {
                         movsd_reg_mem_sib(
                             &mut self.buf,
                             // TODO: dont hardcode xmm0
-                            Register::Xmm0,
+                            fpr,
                             stack_base,
                             stack_index,
                             Scale::target_pointer_with(),
@@ -526,14 +527,14 @@ impl<'a> CodegenCx<'a> {
                         );
 
                         // Increment
-                        let patch_site = addsd_reg_mem_disp(&mut self.buf, Register::Xmm0, Register::Rip, 0);
+                        let patch_site = addsd_reg_mem_disp(&mut self.buf, fpr, Register::Rip, 0);
                         self.codegen_f64_rip_offset(1.0, patch_site);
 
                         // Write back result
                         self.codegen_ld_stack_len(stack_len);
                         movsd_mem_sib_reg(
                             &mut self.buf,
-                            Register::Xmm0,
+                            fpr,
                             stack_base,
                             stack_index,
                             Scale::target_pointer_with(),
@@ -541,6 +542,7 @@ impl<'a> CodegenCx<'a> {
                         );
                         self.apply_length_change(LengthChange::Inc, self.stack_len_offset());
 
+                        self.add_fpr(fpr);
                         self.add_caller_reg(stack_index);
                         self.add_caller_reg(stack_base);
                         self.add_caller_reg(stack_len);
