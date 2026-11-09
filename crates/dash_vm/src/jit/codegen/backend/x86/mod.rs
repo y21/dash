@@ -27,7 +27,8 @@ mod opcodes {
     pub const PUSH_REG: u8 = 0x50;
     pub const POP_REG: u8 = 0x58;
     pub const CMP_AL_IMM8: u8 = 0x3C;
-    pub const TEST_R_R: u8 = 0x85;
+    pub const CMP_RM_IMM32: u8 = 0x81;
+    pub const TEST_R_RM: u8 = 0x85;
     pub const JE_REL32: u8 = 0x84;
     pub const JNE_REL32: u8 = 0x85;
     pub const JMP_REL32: u8 = 0xE9;
@@ -48,6 +49,8 @@ mod opcodes {
     pub const AND_R_IMM8: u8 = 0x83;
     pub const AND_R_IMM32: u8 = 0x81;
     pub const INT3: u8 = 0xCC;
+    pub const SHR_REG_IMM8: u8 = 0xC1;
+    pub const NOT: u8 = 0xF7;
 }
 
 use std::mem::offset_of;
@@ -591,7 +594,15 @@ pub fn test_reg_reg(buf: &mut CodeBuffer, reg1: Register, reg2: Register) {
     if reg1.join_register_size(reg2) == 64 {
         encoding.rex |= Rex::W;
     }
-    encoding.write_into(buf, &[opcodes::TEST_R_R]);
+    encoding.write_into(buf, &[opcodes::TEST_R_RM]);
+}
+
+pub fn test_reg_mem_disp(buf: &mut CodeBuffer, reg: Register, base: Register, offset: i32) -> CpuIp {
+    let mut encoding = encode_modrm_reg_mem(RegField::Reg(reg), Mem::RegDispImm(base, offset));
+    if reg.size_bits() == 64 {
+        encoding.rex |= Rex::W;
+    }
+    encoding.write_into(buf, &[opcodes::TEST_R_RM])
 }
 
 pub fn orq_mem_reg(buf: &mut CodeBuffer, reg: Register, base: Register, offset: i32) -> CpuIp {
@@ -661,6 +672,15 @@ pub fn sub_rsp_imm8(buf: &mut CodeBuffer, imm: u8) {
 pub fn cmp_reg_al_imm8(buf: &mut CodeBuffer, imm: u8) {
     buf.push(opcodes::CMP_AL_IMM8);
     buf.push(imm);
+}
+
+pub fn cmp_reg_imm32(buf: &mut CodeBuffer, reg: Register, imm: i32) {
+    let mut encoding = encode_modrm_reg_reg(RegField::Bits(7), reg);
+    if reg.size_bits() == 64 {
+        encoding.rex |= Rex::W;
+    }
+    encoding.write_into(buf, &[opcodes::CMP_RM_IMM32]);
+    buf.extend_from_slice(&imm.to_le_bytes());
 }
 
 pub fn jne_imm32(buf: &mut CodeBuffer, offset: i32) -> CpuIp {
@@ -738,6 +758,23 @@ pub fn lea_reg_mem(buf: &mut CodeBuffer, dest: Register, base: Register, offset:
     encoding.write_into(buf, &[opcodes::LEA]);
 }
 
+pub fn not_reg(buf: &mut CodeBuffer, reg: Register) {
+    let mut encoding = encode_modrm_reg_reg(RegField::Bits(2), reg);
+    if reg.size_bits() == 64 {
+        encoding.rex |= Rex::W;
+    }
+    encoding.write_into(buf, &[opcodes::NOT]);
+}
+
+pub fn shr_imm8(buf: &mut CodeBuffer, reg: Register, imm: u8) {
+    let mut encoding = encode_modrm_reg_reg(RegField::Bits(5), reg);
+    if reg.size_bits() == 64 {
+        encoding.rex |= Rex::W;
+    }
+    encoding.write_into(buf, &[opcodes::SHR_REG_IMM8]);
+    buf.push(imm);
+}
+
 pub fn patch_rel32(buf: &mut CodeBuffer, patch_site: CpuIp, target: CpuIp) {
     let patch_site = patch_site as usize;
     let disp = target as i64 - (patch_site as i64 + 4);
@@ -775,7 +812,9 @@ pub fn register_synthetic_block(buf: &mut CodeBuffer, label: SyntheticLabel) -> 
 
 #[cfg(test)]
 mod tests {
+    use crate::jit::dataflow::LocalValues;
     use crate::jit::ir::Body;
+    use crate::jit::passes::Assumptions;
 
     use super::*;
 
@@ -783,6 +822,8 @@ mod tests {
         CodeBuffer::new(&Body {
             blocks: Default::default(),
             root: BasicBlockId(0),
+            assumptions: Assumptions::default(),
+            initial_local_values: LocalValues::default(),
         })
     }
 
@@ -1241,5 +1282,102 @@ mod tests {
         assert_eq!(Register::Edx.to_8(), Register::Dl);
         assert_enc(&[0x41, 0x0F, 0x97, 0xC0], |b| seta_reg(b, Register::R8.to_8()));
         assert_enc(&[0x40, 0x0F, 0x97, 0xC7], |b| seta_reg(b, Register::Dil));
+    }
+
+    #[test]
+    fn enc_test_reg_mem_disp() {
+        // REX.W, signed disp8
+        assert_enc(&[0x48, 0x85, 0x4D, 0xF0], |b| {
+            test_reg_mem_disp(b, Register::Rcx, Register::Rbp, -16);
+        });
+        // REX.WR with a positive disp8
+        assert_enc(&[0x4C, 0x85, 0x55, 0x08], |b| {
+            test_reg_mem_disp(b, Register::R10, Register::Rbp, 8);
+        });
+        // REX.WB and SIB for [r12]
+        assert_enc(&[0x49, 0x85, 0x54, 0x24, 0x00], |b| {
+            test_reg_mem_disp(b, Register::Rdx, Register::R12, 0);
+        });
+        // REX.WRB for an extended register and base
+        assert_enc(&[0x4D, 0x85, 0x7D, 0xF8], |b| {
+            test_reg_mem_disp(b, Register::R15, Register::R13, -8);
+        });
+        // 32-bit register: no REX.W
+        assert_enc(&[0x85, 0x45, 0xF8], |b| {
+            test_reg_mem_disp(b, Register::Eax, Register::Rbp, -8);
+        });
+        // disp32 for an offset outside the signed disp8 range
+        assert_enc(&[0x48, 0x85, 0x85, 0x34, 0x12, 0x00, 0x00], |b| {
+            test_reg_mem_disp(b, Register::Rax, Register::Rbp, 0x1234);
+        });
+    }
+
+    #[test]
+    fn enc_not_reg() {
+        assert_enc(&[0x48, 0xF7, 0xD0], |b| not_reg(b, Register::Rax));
+        // REX.WB for an extended 64-bit register
+        assert_enc(&[0x49, 0xF7, 0xD2], |b| not_reg(b, Register::R10));
+        assert_enc(&[0x49, 0xF7, 0xD7], |b| not_reg(b, Register::R15));
+        // 32-bit register: no REX.W
+        assert_enc(&[0xF7, 0xD0], |b| not_reg(b, Register::Eax));
+        // REX.B for an extended 32-bit register
+        assert_enc(&[0x41, 0xF7, 0xD0], |b| not_reg(b, Register::R8d));
+    }
+
+    #[test]
+    fn enc_cmp_reg_imm32() {
+        // 64-bit register with a positive immediate
+        assert_enc(&[0x48, 0x81, 0xF8, 0x34, 0x12, 0x00, 0x00], |b| {
+            cmp_reg_imm32(b, Register::Rax, 0x1234);
+        });
+        // Signed immediate edge values are always encoded as imm32
+        assert_enc(&[0x48, 0x81, 0xF9, 0xFF, 0xFF, 0xFF, 0xFF], |b| {
+            cmp_reg_imm32(b, Register::Rcx, -1);
+        });
+        assert_enc(&[0x48, 0x81, 0xF8, 0x00, 0x00, 0x00, 0x80], |b| {
+            cmp_reg_imm32(b, Register::Rax, i32::MIN);
+        });
+        // REX.WB for an extended 64-bit register
+        assert_enc(&[0x49, 0x81, 0xFA, 0xFF, 0xFF, 0xFF, 0x7F], |b| {
+            cmp_reg_imm32(b, Register::R10, i32::MAX);
+        });
+        // 32-bit register: no REX.W
+        assert_enc(&[0x81, 0xF8, 0x01, 0x00, 0x00, 0x00], |b| {
+            cmp_reg_imm32(b, Register::Eax, 1);
+        });
+        // REX.B for an extended 32-bit register
+        assert_enc(&[0x41, 0x81, 0xF8, 0xFF, 0xFF, 0xFF, 0xFF], |b| {
+            cmp_reg_imm32(b, Register::R8d, -1);
+        });
+    }
+
+    #[test]
+    fn enc_shr_imm8() {
+        // 64-bit register with a typical shift count
+        assert_enc(&[0x48, 0xC1, 0xE8, 0x04], |b| {
+            shr_imm8(b, Register::Rax, 4);
+        });
+        // Immediate edge values are encoded as a single byte
+        assert_enc(&[0x48, 0xC1, 0xE9, 0x00], |b| {
+            shr_imm8(b, Register::Rcx, 0);
+        });
+        assert_enc(&[0x48, 0xC1, 0xE8, 0xFF], |b| {
+            shr_imm8(b, Register::Rax, u8::MAX);
+        });
+        // REX.WB for an extended 64-bit register
+        assert_enc(&[0x49, 0xC1, 0xEA, 0x01], |b| {
+            shr_imm8(b, Register::R10, 1);
+        });
+        assert_enc(&[0x49, 0xC1, 0xEF, 0x20], |b| {
+            shr_imm8(b, Register::R15, 32);
+        });
+        // 32-bit register: no REX.W
+        assert_enc(&[0xC1, 0xE8, 0x08], |b| {
+            shr_imm8(b, Register::Eax, 8);
+        });
+        // REX.B for an extended 32-bit register
+        assert_enc(&[0x41, 0xC1, 0xE8, 0xFF], |b| {
+            shr_imm8(b, Register::R8d, u8::MAX);
+        });
     }
 }

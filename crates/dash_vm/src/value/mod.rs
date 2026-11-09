@@ -104,7 +104,7 @@ impl Value {
                      ^ This bit is always set for non-doubles
      */
     const TAG_MASK: u64 = 0b1_11111111111_1111 << (64 - 16);
-    const NON_NUMBER_MASK: u64 = 0b0_11111111111_1100 << (64 - 16);
+    pub(crate) const NON_NUMBER_MASK: u64 = 0b0_11111111111_1100 << (64 - 16);
 
     pub(crate) const BOOLEAN_MASK: u64 = 0b0_11111111111_1100 << (64 - 16);
     pub(crate) const STRING_MASK: u64 = 0b1_11111111111_1100 << (64 - 16);

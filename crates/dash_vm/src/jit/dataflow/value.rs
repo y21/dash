@@ -1,6 +1,6 @@
 use crate::jit::dataflow::join::{Join, JoinChange};
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum ValueType {
     Number,
     Boolean,

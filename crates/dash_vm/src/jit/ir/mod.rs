@@ -10,6 +10,8 @@ mod lower;
 pub use lower::lower_body;
 
 use crate::frame::Ip;
+use crate::jit::dataflow::LocalValues;
+use crate::jit::passes::Assumptions;
 
 index_type! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -261,4 +263,6 @@ impl BasicBlock {
 pub struct Body {
     pub blocks: IndexVec<BasicBlock, BasicBlockId>,
     pub root: BasicBlockId,
+    pub assumptions: Assumptions,
+    pub initial_local_values: LocalValues,
 }

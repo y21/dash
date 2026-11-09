@@ -77,6 +77,10 @@ impl JitFnHandle {
         match ret.status {
             // SAFETY: jit initializes out->ip for normal returns
             HandlerStubStatus::Normal => JitReturn::Normal { ip: Ip(unsafe { *ip }) },
+            // SAFETY: jit initializes out->ip for bailout returns
+            HandlerStubStatus::PreludeTypeMismatchBailout => {
+                JitReturn::PreludeTypeMismatchBailout { ip: Ip(unsafe { *ip }) }
+            }
             HandlerStubStatus::Exception => {
                 let exception = unsafe { ret.payload.value };
                 JitReturn::Exception { value: exception }
@@ -93,6 +97,9 @@ pub enum JitReturn {
     Normal {
         ip: Ip,
     },
+    PreludeTypeMismatchBailout {
+        ip: Ip,
+    },
     Exception {
         value: Unrooted,
     },
@@ -102,6 +109,7 @@ pub enum JitReturn {
 #[repr(C)]
 pub enum HandlerStubStatus {
     Normal,
+    PreludeTypeMismatchBailout,
     Exception,
 }
 
@@ -185,7 +193,7 @@ pub fn compile_loop_region(scope: &mut LocalScope<'_>, start: Ip, end: Ip) -> Re
             let bytecode = BufferRef::from(bytecode);
 
             let mut body = ir::lower_body(bytecode, scope)?;
-            let mut dataflow = dataflow::DataflowEngine::compute(&body, scope);
+            let mut dataflow = dataflow::DataflowEngine::compute(&body);
             passes::run(&mut body, &mut dataflow);
 
             debug!("{body:#?}");

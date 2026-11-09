@@ -14,7 +14,7 @@ index_type! {
     /// Local indices "in the backend", i.e. used by the compiler and the VM.
     /// As opposed to [`FrontLocalId`], which is given out for "syntactic locals" during parsing.
     /// Frontend locals are lowered to backend locals during name res.
-    #[derive(derive_more::Display, Debug, Copy, Clone, PartialEq)]
+    #[derive(derive_more::Display, Debug, Copy, Clone, PartialEq, Eq, Hash)]
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub struct BackLocalId(pub u16);
 }

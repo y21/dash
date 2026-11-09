@@ -24,6 +24,7 @@ pub enum SyntheticLabel {
     StubStatusHandler,
     Exit,
     Epilogue,
+    PreludeTypeMismatchBailout,
 }
 
 #[derive(Debug, Default)]

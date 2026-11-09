@@ -43,7 +43,9 @@ pub struct DataflowEngine {
     entry_states: IndexVec<Option<BlockState>, BasicBlockId>,
 }
 
-fn values_for_locals(scope: &LocalScope<'_>) -> IndexVec<ValueMetadata, BackLocalId> {
+pub type LocalValues = IndexVec<ValueMetadata, BackLocalId>;
+
+pub fn values_for_locals(scope: &LocalScope<'_>) -> LocalValues {
     let local_count = scope.frames.current_fn().locals;
     let mut locals = IndexVec::with_capacity(local_count);
 
@@ -61,13 +63,13 @@ fn values_for_locals(scope: &LocalScope<'_>) -> IndexVec<ValueMetadata, BackLoca
 }
 
 impl DataflowEngine {
-    pub fn compute(body: &Body, scope: &LocalScope<'_>) -> Self {
+    pub fn compute(body: &Body) -> Self {
         let entry_states = IndexVec::from_fn(
             |id| {
                 if id == body.root {
                     Some(BlockState {
                         stack: Vec::new(),
-                        locals: values_for_locals(scope),
+                        locals: body.initial_local_values.clone(),
                     })
                 } else {
                     None

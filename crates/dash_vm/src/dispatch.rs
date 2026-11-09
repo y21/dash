@@ -1154,6 +1154,13 @@ mod handlers {
                         match result {
                             jit::JitReturn::Normal { ip } => {
                                 cx.frames.set_ip(ip);
+                                return Ok(None);
+                            }
+                            jit::JitReturn::PreludeTypeMismatchBailout { ip } => {
+                                dash_log::warn!("jit region {start_ip:?}..={end_ip:?} had type mismatch bailout");
+                                cx.frames.set_ip(ip);
+                                cx.frames.set_byte(hotness_byte_ip, hotness.disable().raw());
+                                return Ok(None);
                             }
                             jit::JitReturn::Exception { value } => return Err(value),
                         }

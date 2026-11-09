@@ -1,6 +1,7 @@
 use std::env::temp_dir;
 use std::mem::offset_of;
 
+use dash_log::debug;
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::scope::BackLocalId;
 use smallvec::SmallVec;
@@ -10,22 +11,25 @@ use crate::frame::Ip;
 use crate::jit::codegen::backend::{
     PrologueData, REG_ARG1, REG_ARG2, REG_ARG3, REG_ARG4, REG_RETURN32, REG_RETURN64, REG_STACK_RELATIVE, Register,
     Scale, add_reg_imm, addsd_reg_mem_disp, addsd_reg_mem_sib, and_reg_imm, call_reg, call_reg_disp, cmp_reg_al_imm8,
-    codegen_epilogue, codegen_prologue, decq_mem, incq_mem, je_branch_target, jmp_block, jmp_branch_target,
-    jmp_synthetic_label, jne_synthetic_label, mov_mem_imm32, mov_mem_reg_scaled, mov_reg_imm32, mov_reg_mem_disp,
-    mov_reg_mem_sib, mov_reg_reg, movsd_mem_sib_reg, movsd_reg_mem_disp, movsd_reg_mem_sib, orq_mem_reg,
-    patch_sites_to, register_synthetic_block, register_user_block, seta_reg, test_reg_reg, ucomisd_reg_mem_disp,
-    ucomisd_reg_mem_sib, usable_callee_saved_regs, usable_caller_saved_gprs, usable_fprs, xor_reg_reg,
+    cmp_reg_imm32, codegen_epilogue, codegen_prologue, decq_mem, incq_mem, je_branch_target, je_synthetic_label,
+    jmp_block, jmp_branch_target, jmp_synthetic_label, jne_synthetic_label, mov_mem_imm32, mov_mem_reg_scaled,
+    mov_reg_imm32, mov_reg_mem_disp, mov_reg_mem_sib, mov_reg_reg, movsd_mem_sib_reg, movsd_reg_mem_disp,
+    movsd_reg_mem_sib, not_reg, orq_mem_reg, patch_sites_to, register_synthetic_block, register_user_block, seta_reg,
+    shr_imm8, test_reg_mem_disp, test_reg_reg, ucomisd_reg_mem_disp, ucomisd_reg_mem_sib, usable_callee_saved_regs,
+    usable_caller_saved_gprs, usable_fprs, xor_reg_reg,
 };
 use crate::jit::codegen::codebuffer::CodeBuffer;
 use crate::jit::codegen::jumpresolver::{CpuIp, SyntheticLabel};
 use crate::jit::codegen::offsets::{VecOffsets, get_sp_offset, get_vec_offsets};
+use crate::jit::dataflow::value::ValueType;
 use crate::jit::dataflow::{DataflowEngine, StmtOrTerminator};
 use crate::jit::ir::{
     BasicBlockId, Body, BranchTarget, ConditionalGotoCondition, ConditionalGotoPopPolicy, GenericStmt, Stmt,
     Terminator, UncheckedAssignmentKind, ValueSource,
 };
 use crate::jit::mmap::MmapFn;
-use crate::jit::{JitOutData, JitVtable};
+use crate::jit::passes::Assumption;
+use crate::jit::{HandlerStubStatus, JitOutData, JitVtable};
 use crate::localscope::LocalScope;
 use crate::value::Value;
 
@@ -211,6 +215,55 @@ impl<'a> CodegenCx<'a> {
             self.sp_field_offset,
         );
         add_reg_imm(&mut self.buf, stack_index32, local.into());
+    }
+
+    fn codegen_assumptions(&mut self) {
+        debug!(?self.body.assumptions);
+
+        let stack_base = self.caller_gpr64();
+        self.codegen_ld_stack_base(stack_base);
+
+        for assumption in &self.body.assumptions {
+            match *assumption {
+                Assumption::LocalHasType { local, ty } => {
+                    let stack_index = self.caller_gpr64();
+                    let value = self.caller_gpr64();
+
+                    self.codegen_local_stack_index(local, stack_index);
+                    mov_reg_mem_sib(
+                        &mut self.buf,
+                        value,
+                        stack_base,
+                        stack_index,
+                        Scale::target_pointer_with(),
+                        0,
+                    );
+
+                    match ty {
+                        ValueType::Number => {
+                            not_reg(&mut self.buf, value);
+                            let patch_site = test_reg_mem_disp(&mut self.buf, value, Register::Rip, 0);
+                            self.codegen_u64_rip_offset(Value::NON_NUMBER_MASK, patch_site);
+                            je_synthetic_label(&mut self.buf, SyntheticLabel::PreludeTypeMismatchBailout);
+                        }
+                        ValueType::Boolean => {
+                            // Move the high 16 bits that contain the tag into the low 16 bits, then compare with the boolean tag mask.
+                            shr_imm8(&mut self.buf, value, 64 - 16);
+                            let boolean_tag = i32::try_from(Value::BOOLEAN_MASK >> (64 - 16)).unwrap();
+                            cmp_reg_imm32(&mut self.buf, value, boolean_tag);
+                            jne_synthetic_label(&mut self.buf, SyntheticLabel::PreludeTypeMismatchBailout);
+                        }
+                        // LowerCtxt::record_local_type_assumption only inserts assumptions for non-Any types
+                        ValueType::Any => unreachable!(),
+                    }
+
+                    self.add_caller_reg(value);
+                    self.add_caller_reg(stack_index);
+                }
+            }
+        }
+
+        self.add_caller_reg(stack_base);
     }
 
     fn codegen_block(&mut self, block: BasicBlockId) {
@@ -710,6 +763,7 @@ pub fn compile(
         max_stack_depth: 0,
     };
 
+    cx.codegen_assumptions();
     cx.codegen_body();
 
     // Exit block
@@ -728,10 +782,34 @@ pub fn compile(
         offset_of!(JitOutData, ip).try_into().unwrap(),
         end_ip.0.cast_signed(),
     );
+    mov_reg_imm32(&mut cx.buf, REG_RETURN32, HandlerStubStatus::Normal as u32);
     jmp_synthetic_label(&mut cx.buf, SyntheticLabel::Epilogue);
 
     // Stub error handler
     register_synthetic_block(&mut cx.buf, SyntheticLabel::StubStatusHandler);
+    jmp_synthetic_label(&mut cx.buf, SyntheticLabel::Epilogue);
+
+    // Prelude type mismatch bailout
+    register_synthetic_block(&mut cx.buf, SyntheticLabel::PreludeTypeMismatchBailout);
+    // Set the ip to the start
+    mov_reg_mem_disp(
+        &mut cx.buf,
+        REG_RETURN64,
+        REG_STACK_RELATIVE,
+        -cx.prologue.out_data_rbp_offset,
+    );
+    mov_mem_imm32(
+        &mut cx.buf,
+        REG_RETURN64,
+        offset_of!(JitOutData, ip).try_into().unwrap(),
+        start_ip.0.cast_signed(),
+    );
+    mov_reg_imm32(
+        &mut cx.buf,
+        REG_RETURN32,
+        HandlerStubStatus::PreludeTypeMismatchBailout as u32,
+    );
+
     jmp_synthetic_label(&mut cx.buf, SyntheticLabel::Epilogue);
 
     // Epilogue

@@ -17,32 +17,51 @@ use dash_middle::compiler::operands::{
     StrictEqOperands, StrictNeOperands, StringConstantOperands, SubOperands, SymbolConstantWide, ThrowOperands,
     TypeofIdentOperands, TypeofOperands,
 };
+use dash_middle::compiler::scope::BackLocalId;
 use dash_middle::indexvec::IndexVec;
 use rustc_hash::FxHashMap;
 
 use crate::frame::Ip;
+use crate::jit::dataflow::value::ValueType;
+use crate::jit::dataflow::{LocalValues, values_for_locals};
 use crate::jit::ir::{
     BasicBlock, BasicBlockId, Body, BranchTarget, ConditionalGotoCondition, ConditionalGotoPopPolicy, GenericStmt,
     Stmt, Terminator, UncheckedAssignmentKind, ValueSource,
 };
+use crate::jit::passes::{Assumption, Assumptions};
 use crate::jit::{BufferRef, CompileError, NoValueExtractContext};
 use crate::localscope::LocalScope;
 
+struct LowerCtxt {
+    ip_to_block: FxHashMap<Ip, BasicBlockId>,
+    assumptions: Assumptions,
+    blocks: IndexVec<BasicBlock, BasicBlockId>,
+    local_values: LocalValues,
+}
+
+impl LowerCtxt {
+    fn record_local_type_assumption(&mut self, local: BackLocalId) {
+        let ty = self.local_values[local].ty;
+        if ty != ValueType::Any {
+            self.assumptions.insert(Assumption::LocalHasType { local, ty });
+        }
+    }
+}
+
 fn create_terminator(
     bytecode: BufferRef<'_>,
-    blocks: &mut IndexVec<BasicBlock, BasicBlockId>,
-    ip_to_block: &mut FxHashMap<Ip, BasicBlockId>,
+    cx: &mut LowerCtxt,
     scope: &LocalScope<'_>,
-    cx: &mut NoValueExtractContext<'_, '_>,
+    ecx: &mut NoValueExtractContext<'_, '_>,
     offset: i16,
     pop: ConditionalGotoPopPolicy,
     condition: ConditionalGotoCondition,
 ) -> Result<Terminator, CompileError> {
-    let true_target = cx.ip() + offset;
-    let false_target = cx.ip();
+    let true_target = ecx.ip() + offset;
+    let false_target = ecx.ip();
 
-    let true_ = lower_to_branch_target(bytecode, true_target, blocks, ip_to_block, scope)?;
-    let false_ = lower_to_branch_target(bytecode, false_target, blocks, ip_to_block, scope)?;
+    let true_ = lower_to_branch_target(bytecode, true_target, cx, scope)?;
+    let false_ = lower_to_branch_target(bytecode, false_target, cx, scope)?;
     Ok(Terminator::ConditionalGoto {
         true_,
         false_,
@@ -54,36 +73,28 @@ fn create_terminator(
 fn lower_to_branch_target(
     bytecode: BufferRef<'_>,
     ip: Ip,
-    blocks: &mut IndexVec<BasicBlock, BasicBlockId>,
-    ip_to_block: &mut FxHashMap<Ip, BasicBlockId>,
+    cx: &mut LowerCtxt,
     scope: &LocalScope<'_>,
 ) -> Result<BranchTarget, CompileError> {
     if ip.0 == bytecode.len() {
         Ok(BranchTarget::Break)
     } else {
-        Ok(BranchTarget::Block(lower_from_ip(
-            bytecode,
-            ip,
-            blocks,
-            ip_to_block,
-            scope,
-        )?))
+        Ok(BranchTarget::Block(lower_from_ip(bytecode, ip, cx, scope)?))
     }
 }
 
 fn lower_from_ip(
     bytecode: BufferRef<'_>,
     ip: Ip,
-    blocks: &mut IndexVec<BasicBlock, BasicBlockId>,
-    ip_to_block: &mut FxHashMap<Ip, BasicBlockId>,
+    cx: &mut LowerCtxt,
     scope: &LocalScope<'_>,
 ) -> Result<BasicBlockId, CompileError> {
-    let block = match ip_to_block.entry(ip) {
+    let block = match cx.ip_to_block.entry(ip) {
         Entry::Occupied(entry) => {
             return Ok(*entry.get());
         }
         Entry::Vacant(entry) => {
-            let block = blocks.push(BasicBlock::dummy());
+            let block = cx.blocks.push(BasicBlock::dummy());
             entry.insert(block);
             block
         }
@@ -92,10 +103,11 @@ fn lower_from_ip(
     let mut stmts = IndexVec::new();
     let mut terminator = None;
 
-    let mut cx = NoValueExtractContext::new(bytecode.as_slice(), ip, scope);
-    while let Some((instr_ip, instr)) = cx.next_instruction_with_operands() {
+    let mut ecx = NoValueExtractContext::new(bytecode.as_slice(), ip, scope);
+    while let Some((instr_ip, instr)) = ecx.next_instruction_with_operands() {
         match instr {
             InstructionOperands::LdLocal(LdLocalOperands(local)) => {
+                cx.record_local_type_assumption(local);
                 stmts.push(Stmt::LdLocal(local));
             }
             InstructionOperands::IntrinsicOp(IntrinsicOperands(kind)) => match kind {
@@ -429,8 +441,8 @@ fn lower_from_ip(
             }
             InstructionOperands::Jmp(JmpOperands(offset))
             | InstructionOperands::LoopBackJmp(LoopBackjumpOperands { offset, hotness: _ }) => {
-                let target = cx.ip() + offset;
-                let succ = lower_to_branch_target(bytecode, target, blocks, ip_to_block, scope)?;
+                let target = ecx.ip() + offset;
+                let succ = lower_to_branch_target(bytecode, target, cx, scope)?;
                 terminator = Some(Terminator::Goto(succ));
                 break;
             }
@@ -440,10 +452,9 @@ fn lower_from_ip(
             })) => {
                 terminator = Some(create_terminator(
                     bytecode,
-                    blocks,
-                    ip_to_block,
+                    cx,
                     scope,
-                    &mut cx,
+                    &mut ecx,
                     offset,
                     ConditionalGotoPopPolicy::Peek,
                     ConditionalGotoCondition::IsFalsy,
@@ -453,10 +464,9 @@ fn lower_from_ip(
             InstructionOperands::JmpTrueNP(JmpTrueNoPopOperands(ConditionalJumpNoPopOperands { offset, value: _ })) => {
                 terminator = Some(create_terminator(
                     bytecode,
-                    blocks,
-                    ip_to_block,
+                    cx,
                     scope,
-                    &mut cx,
+                    &mut ecx,
                     offset,
                     ConditionalGotoPopPolicy::Peek,
                     ConditionalGotoCondition::IsTruthy,
@@ -469,10 +479,9 @@ fn lower_from_ip(
             })) => {
                 terminator = Some(create_terminator(
                     bytecode,
-                    blocks,
-                    ip_to_block,
+                    cx,
                     scope,
-                    &mut cx,
+                    &mut ecx,
                     offset,
                     ConditionalGotoPopPolicy::Peek,
                     ConditionalGotoCondition::IsNullish,
@@ -485,10 +494,9 @@ fn lower_from_ip(
             })) => {
                 terminator = Some(create_terminator(
                     bytecode,
-                    blocks,
-                    ip_to_block,
+                    cx,
                     scope,
-                    &mut cx,
+                    &mut ecx,
                     offset,
                     ConditionalGotoPopPolicy::Peek,
                     ConditionalGotoCondition::IsUndefined,
@@ -498,10 +506,9 @@ fn lower_from_ip(
             InstructionOperands::JmpFalseP(JmpFalsePopOperands(ConditionalJumpPopOperands { offset, value: _ })) => {
                 terminator = Some(create_terminator(
                     bytecode,
-                    blocks,
-                    ip_to_block,
+                    cx,
                     scope,
-                    &mut cx,
+                    &mut ecx,
                     offset,
                     ConditionalGotoPopPolicy::Pop,
                     ConditionalGotoCondition::IsFalsy,
@@ -511,10 +518,9 @@ fn lower_from_ip(
             InstructionOperands::JmpTrueP(JmpTruePopOperands(ConditionalJumpPopOperands { offset, value: _ })) => {
                 terminator = Some(create_terminator(
                     bytecode,
-                    blocks,
-                    ip_to_block,
+                    cx,
                     scope,
-                    &mut cx,
+                    &mut ecx,
                     offset,
                     ConditionalGotoPopPolicy::Pop,
                     ConditionalGotoCondition::IsTruthy,
@@ -527,10 +533,9 @@ fn lower_from_ip(
             })) => {
                 terminator = Some(create_terminator(
                     bytecode,
-                    blocks,
-                    ip_to_block,
+                    cx,
                     scope,
-                    &mut cx,
+                    &mut ecx,
                     offset,
                     ConditionalGotoPopPolicy::Pop,
                     ConditionalGotoCondition::IsNullish,
@@ -543,10 +548,9 @@ fn lower_from_ip(
             })) => {
                 terminator = Some(create_terminator(
                     bytecode,
-                    blocks,
-                    ip_to_block,
+                    cx,
                     scope,
-                    &mut cx,
+                    &mut ecx,
                     offset,
                     ConditionalGotoPopPolicy::Pop,
                     ConditionalGotoCondition::IsUndefined,
@@ -560,14 +564,26 @@ fn lower_from_ip(
         }
     }
 
-    blocks[block] = BasicBlock { stmts, terminator };
+    cx.blocks[block] = BasicBlock { stmts, terminator };
     Ok(block)
 }
 
 pub fn lower_body(bytecode: BufferRef<'_>, scope: &LocalScope<'_>) -> Result<Body, CompileError> {
-    let mut blocks = IndexVec::new();
-    let mut ip_to_block = FxHashMap::default();
-    let root = lower_from_ip(bytecode, Ip::ZERO, &mut blocks, &mut ip_to_block, scope)?;
+    let local_values = values_for_locals(scope);
 
-    Ok(Body { blocks, root })
+    let mut cx = LowerCtxt {
+        blocks: IndexVec::new(),
+        local_values,
+        ip_to_block: FxHashMap::default(),
+        assumptions: Assumptions::default(),
+    };
+
+    let root = lower_from_ip(bytecode, Ip::ZERO, &mut cx, scope)?;
+
+    Ok(Body {
+        blocks: cx.blocks,
+        root,
+        assumptions: cx.assumptions,
+        initial_local_values: cx.local_values,
+    })
 }

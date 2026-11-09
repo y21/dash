@@ -927,3 +927,36 @@ jit_test!(
     assert(caught === 'boom');
     "
 );
+
+jit_test!(
+    jit_prelude_type_mismatch_bailout_number,
+    "
+    function loop(n, expectCount) {
+        let count = 0;
+        for (let i = 0; i < n; i++) {
+            count++;
+        }
+        assert(count === expectCount);
+    }
+    loop(200, 200);
+    loop('2', 2); // type mismatch in cached loop
+    loop(200, 200);
+    "
+);
+
+jit_test!(
+    jit_prelude_type_mismatch_bailout_boolean,
+    "
+    function loop(n, b, expectCount) {
+        let count = 0;
+        for (let i = 0; i < n; i++) {
+            if (b) ;
+            count++;
+        }
+        assert(count === expectCount);
+    }
+    loop(200, true, 200);
+    loop(200, 'x', 200); // type mismatch on `b` in cached loop
+    loop(200, true, 200);
+    "
+);

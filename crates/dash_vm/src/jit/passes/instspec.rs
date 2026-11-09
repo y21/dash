@@ -1,30 +1,30 @@
+use crate::jit::dataflow::StmtOrTerminator;
 use crate::jit::dataflow::value::ValueType;
-use crate::jit::dataflow::{DataflowEngine, StmtOrTerminator};
-use crate::jit::ir::{Body, ConditionalGotoCondition, GenericStmt, Stmt, Terminator, ValueSource};
-use crate::jit::passes::PassResult;
+use crate::jit::ir::{ConditionalGotoCondition, GenericStmt, Stmt, Terminator, ValueSource};
+use crate::jit::passes::{OptCtxt, PassResult};
 
-pub fn run(body: &mut Body, dataflow: &mut DataflowEngine) -> PassResult {
+pub fn run(cx: &mut OptCtxt) -> PassResult {
     let mut result = PassResult::Unchanged;
 
-    for block in body.blocks.iter_indices() {
-        let mut cursor = dataflow.block_cursor_mut(body, block);
+    for block in cx.body.blocks.iter_indices() {
+        let mut cursor = cx.dataflow.block_cursor_mut(cx.body, block);
 
-        for stmt in body.blocks[block].stmts.iter_indices() {
-            let state = cursor.seek_to_before(body, StmtOrTerminator::Stmt(stmt));
+        for stmt in cx.body.blocks[block].stmts.iter_indices() {
+            let state = cursor.seek_to_before(cx.body, StmtOrTerminator::Stmt(stmt));
 
-            match body.blocks[block].stmts[stmt] {
+            match cx.body.blocks[block].stmts[stmt] {
                 Stmt::Generic(GenericStmt::Add, _) => {
                     let [.., lhs, rhs] = &*state.stack else {
                         panic!("Stack mismatch")
                     };
 
                     if lhs.ty == rhs.ty && lhs.ty == ValueType::Number {
-                        body.blocks[block].stmts[stmt] = Stmt::UncheckedNumberAdd {
+                        cx.body.blocks[block].stmts[stmt] = Stmt::UncheckedNumberAdd {
                             lhs: ValueSource::Stack,
                             rhs: ValueSource::Stack,
                         };
                         result = PassResult::Changed;
-                        cursor.invalidate_block(body, StmtOrTerminator::Stmt(stmt));
+                        cursor.invalidate_block(cx.body, StmtOrTerminator::Stmt(stmt));
                     }
                 }
                 Stmt::Generic(GenericStmt::Lt, _) => {
@@ -33,20 +33,20 @@ pub fn run(body: &mut Body, dataflow: &mut DataflowEngine) -> PassResult {
                     };
 
                     if lhs.ty == rhs.ty && lhs.ty == ValueType::Number {
-                        body.blocks[block].stmts[stmt] = Stmt::UncheckedNumberLt {
+                        cx.body.blocks[block].stmts[stmt] = Stmt::UncheckedNumberLt {
                             lhs: ValueSource::Stack,
                             rhs: ValueSource::Stack,
                         };
                         result = PassResult::Changed;
-                        cursor.invalidate_block(body, StmtOrTerminator::Stmt(stmt));
+                        cursor.invalidate_block(cx.body, StmtOrTerminator::Stmt(stmt));
                     }
                 }
                 _ => {}
             }
         }
 
-        let state = cursor.seek_to_before(body, StmtOrTerminator::Terminator);
-        let terminator = body.blocks[block].terminator_mut();
+        let state = cursor.seek_to_before(cx.body, StmtOrTerminator::Terminator);
+        let terminator = cx.body.blocks[block].terminator_mut();
         if let Terminator::ConditionalGoto {
             true_: _,
             false_: _,
@@ -61,18 +61,18 @@ pub fn run(body: &mut Body, dataflow: &mut DataflowEngine) -> PassResult {
                 ConditionalGotoCondition::IsFalsy if is_boolean => {
                     *condition = ConditionalGotoCondition::IsFalse;
                     result = PassResult::Changed;
-                    cursor.invalidate_block(body, StmtOrTerminator::Terminator);
+                    cursor.invalidate_block(cx.body, StmtOrTerminator::Terminator);
                 }
                 ConditionalGotoCondition::IsTruthy if is_boolean => {
                     *condition = ConditionalGotoCondition::IsTrue;
                     result = PassResult::Changed;
-                    cursor.invalidate_block(body, StmtOrTerminator::Terminator);
+                    cursor.invalidate_block(cx.body, StmtOrTerminator::Terminator);
                 }
                 _ => {}
             }
         }
 
-        cursor.commit(body);
+        cursor.commit(cx.body);
     }
 
     result
