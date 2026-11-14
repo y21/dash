@@ -360,9 +360,14 @@ impl Object for RequireFunction {
 
         let is_path = matches!(arg.chars().next(), Some('.' | '/' | '~'));
         let result = if is_path {
-            if !arg.ends_with(".js") && !arg.ends_with(".json") {
-                if std::fs::metadata(self.current_dir.join(&arg)).is_ok_and(|md| md.is_dir()) {
-                    arg += "/index.js";
+            const EXTENSIONS: [&str; 3] = [".js", ".cjs", ".json"];
+            if !EXTENSIONS.iter().any(|ext| arg.ends_with(ext)) {
+                if let Ok(metadata) = std::fs::metadata(self.current_dir.join(&arg)) {
+                    if metadata.is_dir() {
+                        arg += "/index.js";
+                    } else {
+                        // Nothing to do if the file exists
+                    }
                 } else {
                     arg += ".js";
                 }
