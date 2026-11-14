@@ -42,7 +42,10 @@ fn main() -> anyhow::Result<()> {
             Command::new("eval")
                 .override_help("Evaluate a JavaScript source string")
                 .arg(Arg::new("source").required(true))
-                .arg(opt_level.clone()),
+                .arg(opt_level.clone())
+                .arg(initial_gc_threshold.clone())
+                .arg(experimental_objdump_jit.clone())
+                .arg(experimental_jit.clone()),
         )
         .subcommand(
             Command::new("run")

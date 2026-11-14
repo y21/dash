@@ -145,6 +145,8 @@ impl Parser<'_, '_> {
                     };
                     property_kind = Kind::Normal;
                     ClassMemberKey::Named(key)
+                } else if let Some(name) = self.expect_string(false) {
+                    ClassMemberKey::Named(name)
                 } else {
                     ClassMemberKey::Named(self.expect_identifier_or_reserved_kw(true)?)
                 }
