@@ -2699,20 +2699,20 @@ fn compile_class_members(
                 (ClassMemberKey::Computed(key), ClassMemberValue::Setter(value)) => {
                     (ObjectMemberKind::DynamicSetter(key), mk_fn(value))
                 }
-                (ClassMemberKey::Named(key), ClassMemberValue::Method(value)) => {
+                (ClassMemberKey::Named(key, _), ClassMemberValue::Method(value)) => {
                     (ObjectMemberKind::Static(key), mk_fn(value))
                 }
-                (ClassMemberKey::Named(key), ClassMemberValue::Field(value)) => (
+                (ClassMemberKey::Named(key, _), ClassMemberValue::Field(value)) => (
                     ObjectMemberKind::Static(key),
                     value.unwrap_or_else(|| Expr {
                         span,
                         kind: ExprKind::undefined_literal(),
                     }),
                 ),
-                (ClassMemberKey::Named(key), ClassMemberValue::Getter(value)) => {
+                (ClassMemberKey::Named(key, _), ClassMemberValue::Getter(value)) => {
                     (ObjectMemberKind::Getter(key), mk_fn(value))
                 }
-                (ClassMemberKey::Named(key), ClassMemberValue::Setter(value)) => {
+                (ClassMemberKey::Named(key, _), ClassMemberValue::Setter(value)) => {
                     (ObjectMemberKind::Setter(key), mk_fn(value))
                 }
             };

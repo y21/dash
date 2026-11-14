@@ -50,7 +50,7 @@ pub fn insert_initializer_in_constructor(class: &Class, statements: &mut Vec<Sta
                                 computed: matches!(member.key, ClassMemberKey::Computed(_)),
                                 property: Box::new(match member.key {
                                     ClassMemberKey::Computed(ref expr) => expr.clone(),
-                                    ClassMemberKey::Named(name) => Expr {
+                                    ClassMemberKey::Named(name, _) => Expr {
                                         span: Span::COMPILER_GENERATED,
                                         kind: ExprKind::identifier(name),
                                     },

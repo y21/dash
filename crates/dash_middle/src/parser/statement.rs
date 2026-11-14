@@ -844,7 +844,7 @@ pub enum ClassMemberKey {
     /// [Key] = Value
     Computed(Expr),
     /// Key = Value
-    Named(Symbol),
+    Named(Symbol, Span),
 }
 
 /// A JavaScript class member
@@ -871,7 +871,7 @@ impl fmt::Display for ClassMember {
 
         match &self.key {
             ClassMemberKey::Computed(c) => write!(f, "[{c}]")?,
-            ClassMemberKey::Named(n) => write!(f, "{n}")?,
+            ClassMemberKey::Named(n, _) => write!(f, "{n}")?,
         }
 
         match &self.value {

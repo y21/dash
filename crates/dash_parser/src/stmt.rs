@@ -138,17 +138,20 @@ impl Parser<'_, '_> {
                 if self.current().is_some_and(|tok| tok.ty == TokenType::LeftParen)
                     && matches!(property_kind, Kind::Getter(_) | Kind::Setter(_))
                 {
-                    let key = match property_kind {
-                        Kind::Getter(_) => sym::get,
-                        Kind::Setter(_) => sym::set,
+                    let (key, span) = match property_kind {
+                        Kind::Getter(span) => (sym::get, span),
+                        Kind::Setter(span) => (sym::set, span),
                         Kind::Normal => unreachable!(),
                     };
                     property_kind = Kind::Normal;
-                    ClassMemberKey::Named(key)
+                    ClassMemberKey::Named(key, span)
                 } else if let Some(name) = self.expect_string(false) {
-                    ClassMemberKey::Named(name)
+                    ClassMemberKey::Named(name, self.previous().unwrap().span)
                 } else {
-                    ClassMemberKey::Named(self.expect_identifier_or_reserved_kw(true)?)
+                    ClassMemberKey::Named(
+                        self.expect_identifier_or_reserved_kw(true)?,
+                        self.previous().unwrap().span,
+                    )
                 }
             };
 
@@ -171,7 +174,7 @@ impl Parser<'_, '_> {
                 let parameters_scope = self.scope_count.inc();
                 let func = FunctionDeclaration {
                     name: match key {
-                        ClassMemberKey::Named(name) => Some(self.create_binding(name)),
+                        ClassMemberKey::Named(name, _) => Some(self.create_binding(name)),
                         // TODO: not correct, `class V { ['a']() {} }` should have its name set to 'a'
                         ClassMemberKey::Computed(_) => None,
                     },
@@ -214,6 +217,11 @@ impl Parser<'_, '_> {
                 // Error on `get v = 3`
                 if let Kind::Getter(span) | Kind::Setter(span) = property_kind {
                     self.error(Error::Unexpected(span, "getter or setter as field"));
+                    return None;
+                }
+
+                if let ClassMemberKey::Named(sym::constructor, span) = key {
+                    self.error(Error::Unexpected(span, "constructor as field"));
                     return None;
                 }
 
