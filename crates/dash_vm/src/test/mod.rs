@@ -806,6 +806,43 @@ jit_test!(
     assert(comparisons[4] && comparisons[5] && comparisons[6] && comparisons[7]);
     assert(!comparisons[8] && comparisons[9]);
     assert(updated === 2);
+
+    let numberOps = true;
+    for (let i = 0; i < 300; i++) {
+        let a = i - 50;
+        let b = 8;
+
+        if ((a < b) !== (i < 58)) numberOps = false;
+        if ((a <= b) !== (i <= 58)) numberOps = false;
+        if ((a > b) !== (i > 58)) numberOps = false;
+        if ((a >= b) !== (i >= 58)) numberOps = false;
+        if ((a == b) !== (i == 58)) numberOps = false;
+        if ((a != b) !== (i != 58)) numberOps = false;
+        if ((a < b && b === 8) !== (i < 58)) numberOps = false;
+        if ((a > b && b === 8) !== (i > 58)) numberOps = false;
+
+        if (a < b && !(a <= b - 1)) numberOps = false;
+        if (a <= b && !(a < b + 1)) numberOps = false;
+        if (a > b && !(a >= b + 1)) numberOps = false;
+        if (a >= b && !(a > b - 1)) numberOps = false;
+
+        if ((NaN < a) !== false) numberOps = false;
+        if ((NaN <= a) !== false) numberOps = false;
+        if ((NaN > a) !== false) numberOps = false;
+        if ((NaN >= a) !== false) numberOps = false;
+        if ((NaN == a) !== false) numberOps = false;
+        if ((NaN != a) !== true) numberOps = false;
+        if ((NaN === a) !== false) numberOps = false;
+        if ((NaN !== a) !== true) numberOps = false;
+
+        let x = a - b;
+        let y = a + (-b);
+        if ((x === y) !== true) numberOps = false;
+        if ((x == y) !== true) numberOps = false;
+        if ((x !== y) !== false) numberOps = false;
+        if ((x != y) !== false) numberOps = false;
+    }
+    assert(numberOps);
     "
 );
 

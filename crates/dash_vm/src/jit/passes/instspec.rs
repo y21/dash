@@ -1,6 +1,6 @@
 use crate::jit::dataflow::StmtOrTerminator;
 use crate::jit::dataflow::value::ValueType;
-use crate::jit::ir::{ConditionalGotoCondition, GenericStmt, Stmt, Terminator, ValueSource};
+use crate::jit::ir::{ConditionalGotoCondition, GenericStmt, Stmt, Terminator, UncheckedNumberBinOp, ValueSource};
 use crate::jit::passes::{OptCtxt, PassResult};
 
 pub fn run(cx: &mut OptCtxt) -> PassResult {
@@ -12,36 +12,34 @@ pub fn run(cx: &mut OptCtxt) -> PassResult {
         for stmt in cx.body.blocks[block].stmts.iter_indices() {
             let state = cursor.seek_to_before(cx.body, StmtOrTerminator::Stmt(stmt));
 
-            match cx.body.blocks[block].stmts[stmt] {
-                Stmt::Generic(GenericStmt::Add, _) => {
-                    let [.., lhs, rhs] = &*state.stack else {
-                        panic!("Stack mismatch")
-                    };
+            let specialized_op = match &cx.body.blocks[block].stmts[stmt] {
+                Stmt::Generic(GenericStmt::Add, _) => Some(UncheckedNumberBinOp::Add),
+                Stmt::Generic(GenericStmt::Sub, _) => Some(UncheckedNumberBinOp::Sub),
+                Stmt::Generic(GenericStmt::Mul, _) => Some(UncheckedNumberBinOp::Mul),
+                Stmt::Generic(GenericStmt::Div, _) => Some(UncheckedNumberBinOp::Div),
+                Stmt::Generic(GenericStmt::Gt, _) => Some(UncheckedNumberBinOp::Gt),
+                Stmt::Generic(GenericStmt::Ge, _) => Some(UncheckedNumberBinOp::Ge),
+                Stmt::Generic(GenericStmt::Lt, _) => Some(UncheckedNumberBinOp::Lt),
+                Stmt::Generic(GenericStmt::Le, _) => Some(UncheckedNumberBinOp::Le),
+                Stmt::Generic(GenericStmt::Eq, _) => Some(UncheckedNumberBinOp::Eq),
+                Stmt::Generic(GenericStmt::Ne, _) => Some(UncheckedNumberBinOp::Ne),
+                _ => None,
+            };
 
-                    if lhs.ty == rhs.ty && lhs.ty == ValueType::Number {
-                        cx.body.blocks[block].stmts[stmt] = Stmt::UncheckedNumberAdd {
-                            lhs: ValueSource::Stack,
-                            rhs: ValueSource::Stack,
-                        };
-                        result = PassResult::Changed;
-                        cursor.invalidate_block(cx.body, StmtOrTerminator::Stmt(stmt));
-                    }
-                }
-                Stmt::Generic(GenericStmt::Lt, _) => {
-                    let [.., lhs, rhs] = &*state.stack else {
-                        panic!("Stack mismatch")
-                    };
+            if let Some(op) = specialized_op {
+                let [.., lhs, rhs] = &*state.stack else {
+                    panic!("Stack mismatch")
+                };
 
-                    if lhs.ty == rhs.ty && lhs.ty == ValueType::Number {
-                        cx.body.blocks[block].stmts[stmt] = Stmt::UncheckedNumberLt {
-                            lhs: ValueSource::Stack,
-                            rhs: ValueSource::Stack,
-                        };
-                        result = PassResult::Changed;
-                        cursor.invalidate_block(cx.body, StmtOrTerminator::Stmt(stmt));
-                    }
+                if lhs.ty == rhs.ty && lhs.ty == ValueType::Number {
+                    cx.body.blocks[block].stmts[stmt] = Stmt::UncheckedNumberBinOp {
+                        op,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Stack,
+                    };
+                    result = PassResult::Changed;
+                    cursor.invalidate_block(cx.body, StmtOrTerminator::Stmt(stmt));
                 }
-                _ => {}
             }
         }
 

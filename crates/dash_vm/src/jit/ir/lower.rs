@@ -26,7 +26,7 @@ use crate::jit::dataflow::value::ValueType;
 use crate::jit::dataflow::{LocalValues, values_for_locals};
 use crate::jit::ir::{
     BasicBlock, BasicBlockId, Body, BranchTarget, ConditionalGotoCondition, ConditionalGotoPopPolicy, GenericStmt,
-    Stmt, Terminator, UncheckedAssignmentKind, ValueSource,
+    Stmt, Terminator, UncheckedAssignmentKind, UncheckedNumberBinOp, ValueSource,
 };
 use crate::jit::passes::{Assumption, Assumptions};
 use crate::jit::{BufferRef, CompileError, NoValueExtractContext};
@@ -113,7 +113,8 @@ fn lower_from_ip(
             InstructionOperands::IntrinsicOp(IntrinsicOperands(kind)) => match kind {
                 IntrinsicKind::LtNumLConstR32((), NumberInline32(num))
                 | IntrinsicKind::LtNumLConstR((), NumberInline8(num)) => {
-                    stmts.push(Stmt::UncheckedNumberLt {
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Lt,
                         lhs: ValueSource::Stack,
                         rhs: ValueSource::Float(num),
                     });
@@ -134,16 +135,32 @@ fn lower_from_ip(
                     stmts.push(Stmt::Generic(GenericStmt::PrefixDecLocalNum(local), instr_ip));
                 }
                 IntrinsicKind::AddNumLR((), ()) => {
-                    stmts.push(Stmt::Generic(GenericStmt::AddNumLR, instr_ip));
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Add,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Stack,
+                    });
                 }
                 IntrinsicKind::SubNumLR((), ()) => {
-                    stmts.push(Stmt::Generic(GenericStmt::SubNumLR, instr_ip));
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Sub,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Stack,
+                    });
                 }
                 IntrinsicKind::MulNumLR((), ()) => {
-                    stmts.push(Stmt::Generic(GenericStmt::MulNumLR, instr_ip));
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Mul,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Stack,
+                    });
                 }
                 IntrinsicKind::DivNumLR((), ()) => {
-                    stmts.push(Stmt::Generic(GenericStmt::DivNumLR, instr_ip));
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Div,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Stack,
+                    });
                 }
                 IntrinsicKind::RemNumLR((), ()) => {
                     stmts.push(Stmt::Generic(GenericStmt::RemNumLR, instr_ip));
@@ -152,22 +169,46 @@ fn lower_from_ip(
                     stmts.push(Stmt::Generic(GenericStmt::PowNumLR, instr_ip));
                 }
                 IntrinsicKind::GtNumLR((), ()) => {
-                    stmts.push(Stmt::Generic(GenericStmt::GtNumLR, instr_ip));
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Gt,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Stack,
+                    });
                 }
                 IntrinsicKind::GeNumLR((), ()) => {
-                    stmts.push(Stmt::Generic(GenericStmt::GeNumLR, instr_ip));
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Ge,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Stack,
+                    });
                 }
                 IntrinsicKind::LtNumLR((), ()) => {
-                    stmts.push(Stmt::Generic(GenericStmt::LtNumLR, instr_ip));
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Lt,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Stack,
+                    });
                 }
                 IntrinsicKind::LeNumLR((), ()) => {
-                    stmts.push(Stmt::Generic(GenericStmt::LeNumLR, instr_ip));
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Le,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Stack,
+                    });
                 }
                 IntrinsicKind::EqNumLR((), ()) => {
-                    stmts.push(Stmt::Generic(GenericStmt::EqNumLR, instr_ip));
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Eq,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Stack,
+                    });
                 }
                 IntrinsicKind::NeNumLR((), ()) => {
-                    stmts.push(Stmt::Generic(GenericStmt::NeNumLR, instr_ip));
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Ne,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Stack,
+                    });
                 }
                 IntrinsicKind::BitOrNumLR((), ()) => {
                     stmts.push(Stmt::Generic(GenericStmt::BitOrNumLR, instr_ip));
@@ -187,21 +228,29 @@ fn lower_from_ip(
                 IntrinsicKind::BitUshrNumLR((), ()) => {
                     stmts.push(Stmt::Generic(GenericStmt::BitUshrNumLR, instr_ip));
                 }
-                IntrinsicKind::GtNumLConstR((), NumberInline8(num)) => {
-                    stmts.push(Stmt::Generic(GenericStmt::GtNumLConstR(num), instr_ip));
-                }
-                IntrinsicKind::GtNumLConstR32((), NumberInline32(num)) => {
-                    stmts.push(Stmt::Generic(GenericStmt::GtNumLConstR32(num), instr_ip));
+                IntrinsicKind::GtNumLConstR((), NumberInline8(num))
+                | IntrinsicKind::GtNumLConstR32((), NumberInline32(num)) => {
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Gt,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Float(num),
+                    });
                 }
                 IntrinsicKind::GeNumLConstR((), NumberInline8(num))
                 | IntrinsicKind::GeNumLConstR32((), NumberInline32(num)) => {
-                    stmts.push(Stmt::Generic(GenericStmt::GeNumLConstR(num), instr_ip));
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Ge,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Float(num),
+                    });
                 }
-                IntrinsicKind::LeNumLConstR((), NumberInline8(num)) => {
-                    stmts.push(Stmt::Generic(GenericStmt::LeNumLConstR(num), instr_ip));
-                }
-                IntrinsicKind::LeNumLConstR32((), NumberInline32(num)) => {
-                    stmts.push(Stmt::Generic(GenericStmt::LeNumLConstR32(num), instr_ip));
+                IntrinsicKind::LeNumLConstR((), NumberInline8(num))
+                | IntrinsicKind::LeNumLConstR32((), NumberInline32(num)) => {
+                    stmts.push(Stmt::UncheckedNumberBinOp {
+                        op: UncheckedNumberBinOp::Le,
+                        lhs: ValueSource::Stack,
+                        rhs: ValueSource::Float(num),
+                    });
                 }
                 _ => unimplemented!("Intrinsic {kind:?} at {instr_ip:?} is not implemented"),
             },

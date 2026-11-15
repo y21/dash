@@ -39,13 +39,22 @@ mod opcodes {
     pub const MOV_MEM_IMM32: u8 = 0xC7;
     pub const MOVSD_REG_RM: &[u8] = &[0x0F, 0x10];
     pub const ADDSD_REG_RM: &[u8] = &[0x0F, 0x58];
+    pub const SUBSD_REG_RM: &[u8] = &[0x0F, 0x5C];
+    pub const MULSD_REG_RM: &[u8] = &[0x0F, 0x59];
+    pub const DIVSD_REG_RM: &[u8] = &[0x0F, 0x5E];
     pub const MOVSD_RM_REG: &[u8] = &[0x0F, 0x11];
     pub const UCOMISD_REG_RM: &[u8] = &[0x0F, 0x2E];
     pub const DEC_INC_RM64: u8 = 0xFF;
     pub const CALL_RM64: u8 = 0xFF;
     pub const XOR: u8 = 0x31;
     pub const SETA_RM8: &[u8] = &[0x0F, 0x97];
+    pub const SETAE_RM8: &[u8] = &[0x0F, 0x93];
+    pub const SETE_RM8: &[u8] = &[0x0F, 0x94];
+    pub const SETNE_RM8: &[u8] = &[0x0F, 0x95];
+    pub const SETP_RM8: &[u8] = &[0x0F, 0x9A];
+    pub const SETNP_RM8: &[u8] = &[0x0F, 0x9B];
     pub const OR_R_RM: u8 = 0x0B;
+    pub const AND_R_RM: u8 = 0x23;
     pub const AND_R_IMM8: u8 = 0x83;
     pub const AND_R_IMM32: u8 = 0x81;
     pub const INT3: u8 = 0xCC;
@@ -479,16 +488,64 @@ pub fn xor_reg_reg(buf: &mut CodeBuffer, dest: Register, src: Register) {
     encoding.write_into(buf, &[opcodes::XOR]);
 }
 
-/// Encodes `seta <dest reg>` instruction
-pub fn seta_reg(buf: &mut CodeBuffer, dest: Register) {
+/// Encodes `setcc <dest reg>` instruction
+fn setcc_reg(buf: &mut CodeBuffer, opcode: &[u8], dest: Register) {
     assert!(dest.size_bits() == 8);
     let encoding = encode_modrm_reg_reg(RegField::Bits(0), dest);
-    encoding.write_into(buf, opcodes::SETA_RM8);
+    encoding.write_into(buf, opcode);
 }
 
-/// Encodes `addsd <dest reg>, [<base reg> + <index reg> * <scale> + <offset imm8>]` (SIB addressing)
-pub fn addsd_reg_mem_sib(
+/// Encodes `seta <dest reg>` instruction
+pub fn seta_reg(buf: &mut CodeBuffer, dest: Register) {
+    setcc_reg(buf, opcodes::SETA_RM8, dest);
+}
+
+/// Encodes `setae <dest reg>` instruction
+pub fn setae_reg(buf: &mut CodeBuffer, dest: Register) {
+    setcc_reg(buf, opcodes::SETAE_RM8, dest);
+}
+
+/// Encodes `sete <dest reg>` instruction
+pub fn sete_reg(buf: &mut CodeBuffer, dest: Register) {
+    setcc_reg(buf, opcodes::SETE_RM8, dest);
+}
+
+/// Encodes `setne <dest reg>` instruction
+pub fn setne_reg(buf: &mut CodeBuffer, dest: Register) {
+    setcc_reg(buf, opcodes::SETNE_RM8, dest);
+}
+
+/// Encodes `setp <dest reg>` instruction
+pub fn setp_reg(buf: &mut CodeBuffer, dest: Register) {
+    setcc_reg(buf, opcodes::SETP_RM8, dest);
+}
+
+/// Encodes `setnp <dest reg>` instruction
+pub fn setnp_reg(buf: &mut CodeBuffer, dest: Register) {
+    setcc_reg(buf, opcodes::SETNP_RM8, dest);
+}
+
+/// Encodes `and <dest reg>, <src reg>` instruction
+pub fn and_reg_reg(buf: &mut CodeBuffer, dest: Register, src: Register) {
+    let mut encoding = encode_modrm_reg_reg(RegField::Reg(dest), src);
+    if dest.join_register_size(src) == 64 {
+        encoding.rex |= Rex::W;
+    }
+    encoding.write_into(buf, &[opcodes::AND_R_RM]);
+}
+
+/// Encodes `or <dest reg>, <src reg>` instruction
+pub fn or_reg_reg(buf: &mut CodeBuffer, dest: Register, src: Register) {
+    let mut encoding = encode_modrm_reg_reg(RegField::Reg(dest), src);
+    if dest.join_register_size(src) == 64 {
+        encoding.rex |= Rex::W;
+    }
+    encoding.write_into(buf, &[opcodes::OR_R_RM]);
+}
+
+fn arithsd_reg_mem_sib(
     buf: &mut CodeBuffer,
+    opcode: &[u8],
     dest: Register,
     base: Register,
     index: Register,
@@ -506,14 +563,83 @@ pub fn addsd_reg_mem_sib(
             offset,
         },
     )
-    .write_into(buf, opcodes::ADDSD_REG_RM);
+    .write_into(buf, opcode);
+}
+
+fn arithsd_reg_mem_disp(
+    buf: &mut CodeBuffer,
+    opcode: &[u8],
+    dest: Register,
+    base: Register,
+    displacement: i32,
+) -> CpuIp {
+    buf.push(0xf2);
+
+    encode_modrm_reg_mem(RegField::Reg(dest), Mem::RegDispImm(base, displacement)).write_into(buf, opcode)
+}
+
+/// Encodes `addsd <dest reg>, [<base reg> + <index reg> * <scale> + <offset imm8>]` (SIB addressing)
+pub fn addsd_reg_mem_sib(
+    buf: &mut CodeBuffer,
+    dest: Register,
+    base: Register,
+    index: Register,
+    scale: Scale,
+    offset: i32,
+) {
+    arithsd_reg_mem_sib(buf, opcodes::ADDSD_REG_RM, dest, base, index, scale, offset);
 }
 
 pub fn addsd_reg_mem_disp(buf: &mut CodeBuffer, dest: Register, base: Register, displacement: i32) -> CpuIp {
-    buf.push(0xf2);
+    arithsd_reg_mem_disp(buf, opcodes::ADDSD_REG_RM, dest, base, displacement)
+}
 
-    encode_modrm_reg_mem(RegField::Reg(dest), Mem::RegDispImm(base, displacement))
-        .write_into(buf, opcodes::ADDSD_REG_RM)
+/// Encodes `subsd <dest reg>, [<base reg> + <index reg> * <scale> + <offset imm8>]` (SIB addressing)
+pub fn subsd_reg_mem_sib(
+    buf: &mut CodeBuffer,
+    dest: Register,
+    base: Register,
+    index: Register,
+    scale: Scale,
+    offset: i32,
+) {
+    arithsd_reg_mem_sib(buf, opcodes::SUBSD_REG_RM, dest, base, index, scale, offset);
+}
+
+pub fn subsd_reg_mem_disp(buf: &mut CodeBuffer, dest: Register, base: Register, displacement: i32) -> CpuIp {
+    arithsd_reg_mem_disp(buf, opcodes::SUBSD_REG_RM, dest, base, displacement)
+}
+
+/// Encodes `mulsd <dest reg>, [<base reg> + <index reg> * <scale> + <offset imm8>]` (SIB addressing)
+pub fn mulsd_reg_mem_sib(
+    buf: &mut CodeBuffer,
+    dest: Register,
+    base: Register,
+    index: Register,
+    scale: Scale,
+    offset: i32,
+) {
+    arithsd_reg_mem_sib(buf, opcodes::MULSD_REG_RM, dest, base, index, scale, offset);
+}
+
+pub fn mulsd_reg_mem_disp(buf: &mut CodeBuffer, dest: Register, base: Register, displacement: i32) -> CpuIp {
+    arithsd_reg_mem_disp(buf, opcodes::MULSD_REG_RM, dest, base, displacement)
+}
+
+/// Encodes `divsd <dest reg>, [<base reg> + <index reg> * <scale> + <offset imm8>]` (SIB addressing)
+pub fn divsd_reg_mem_sib(
+    buf: &mut CodeBuffer,
+    dest: Register,
+    base: Register,
+    index: Register,
+    scale: Scale,
+    offset: i32,
+) {
+    arithsd_reg_mem_sib(buf, opcodes::DIVSD_REG_RM, dest, base, index, scale, offset);
+}
+
+pub fn divsd_reg_mem_disp(buf: &mut CodeBuffer, dest: Register, base: Register, displacement: i32) -> CpuIp {
+    arithsd_reg_mem_disp(buf, opcodes::DIVSD_REG_RM, dest, base, displacement)
 }
 
 /// Encodes `movsd [<base reg> + <index reg> * <scale> + <offset imm8>], <src reg>` (SIB addressing)
@@ -962,6 +1088,36 @@ mod tests {
     }
 
     #[test]
+    fn enc_subsd_reg_mem_sib() {
+        assert_enc(&[0xF2, 0x43, 0x0F, 0x5C, 0x44, 0xDC, 0xF0], |b| {
+            subsd_reg_mem_sib(b, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16)
+        });
+        assert_enc(&[0xF2, 0x44, 0x0F, 0x5C, 0x6C, 0x08, 0x00], |b| {
+            subsd_reg_mem_sib(b, Register::Xmm13, Register::Rax, Register::Rcx, Scale::X1, 0)
+        });
+    }
+
+    #[test]
+    fn enc_mulsd_reg_mem_sib() {
+        assert_enc(&[0xF2, 0x43, 0x0F, 0x59, 0x44, 0xDC, 0xF0], |b| {
+            mulsd_reg_mem_sib(b, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16)
+        });
+        assert_enc(&[0xF2, 0x44, 0x0F, 0x59, 0x6C, 0x08, 0x00], |b| {
+            mulsd_reg_mem_sib(b, Register::Xmm13, Register::Rax, Register::Rcx, Scale::X1, 0)
+        });
+    }
+
+    #[test]
+    fn enc_divsd_reg_mem_sib() {
+        assert_enc(&[0xF2, 0x43, 0x0F, 0x5E, 0x44, 0xDC, 0xF0], |b| {
+            divsd_reg_mem_sib(b, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16)
+        });
+        assert_enc(&[0xF2, 0x44, 0x0F, 0x5E, 0x6C, 0x08, 0x00], |b| {
+            divsd_reg_mem_sib(b, Register::Xmm13, Register::Rax, Register::Rcx, Scale::X1, 0)
+        });
+    }
+
+    #[test]
     fn enc_movsd_mem_sib_reg() {
         assert_enc(&[0xF2, 0x43, 0x0F, 0x11, 0x44, 0xDC, 0xF0], |b| {
             movsd_mem_sib_reg(b, Register::Xmm0, Register::R12, Register::R11, Scale::X8, -16)
@@ -1083,6 +1239,28 @@ mod tests {
         assert_enc(&[0x4C, 0x31, 0xE8], |b| xor_reg_reg(b, Register::R13, Register::Rax));
         // REX.RB
         assert_enc(&[0x4D, 0x31, 0xFF], |b| xor_reg_reg(b, Register::R15, Register::R15));
+    }
+
+    #[test]
+    fn enc_and_reg_reg() {
+        assert_enc(&[0x48, 0x23, 0xC0], |b| and_reg_reg(b, Register::Rax, Register::Rax));
+        // 32-bit: no W
+        assert_enc(&[0x23, 0xC0], |b| and_reg_reg(b, Register::Eax, Register::Eax));
+        // REX.WR: dest is rdx, source is rsi
+        assert_enc(&[0x48, 0x23, 0xD6], |b| and_reg_reg(b, Register::Rdx, Register::Rsi));
+        // REX.WRB
+        assert_enc(&[0x4D, 0x23, 0xD5], |b| and_reg_reg(b, Register::R10, Register::R13));
+    }
+
+    #[test]
+    fn enc_or_reg_reg() {
+        assert_enc(&[0x48, 0x0B, 0xC0], |b| or_reg_reg(b, Register::Rax, Register::Rax));
+        // 32-bit: no W
+        assert_enc(&[0x0B, 0xC0], |b| or_reg_reg(b, Register::Eax, Register::Eax));
+        // REX.WR: dest is rdx, source is rsi
+        assert_enc(&[0x48, 0x0B, 0xD6], |b| or_reg_reg(b, Register::Rdx, Register::Rsi));
+        // REX.WRB
+        assert_enc(&[0x4D, 0x0B, 0xD5], |b| or_reg_reg(b, Register::R10, Register::R13));
     }
 
     #[test]
@@ -1282,6 +1460,17 @@ mod tests {
         assert_eq!(Register::Edx.to_8(), Register::Dl);
         assert_enc(&[0x41, 0x0F, 0x97, 0xC0], |b| seta_reg(b, Register::R8.to_8()));
         assert_enc(&[0x40, 0x0F, 0x97, 0xC7], |b| seta_reg(b, Register::Dil));
+    }
+
+    #[test]
+    fn enc_setcc_reg() {
+        assert_enc(&[0x0F, 0x93, 0xC0], |b| setae_reg(b, Register::Al));
+        assert_enc(&[0x0F, 0x94, 0xC1], |b| sete_reg(b, Register::Cl));
+        assert_enc(&[0x0F, 0x95, 0xC2], |b| setne_reg(b, Register::Dl));
+        assert_enc(&[0x0F, 0x9A, 0xC0], |b| setp_reg(b, Register::Al));
+        assert_enc(&[0x0F, 0x9B, 0xC1], |b| setnp_reg(b, Register::Cl));
+        assert_enc(&[0x41, 0x0F, 0x95, 0xC0], |b| setne_reg(b, Register::R8.to_8()));
+        assert_enc(&[0x40, 0x0F, 0x95, 0xC7], |b| setne_reg(b, Register::Dil));
     }
 
     #[test]

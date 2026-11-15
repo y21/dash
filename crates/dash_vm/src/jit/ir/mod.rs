@@ -155,14 +155,25 @@ pub enum UncheckedAssignmentKind {
     NumberPostfixIncrement,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum UncheckedNumberBinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Gt,
+    Ge,
+    Lt,
+    Le,
+    Eq,
+    Ne,
+}
+
 #[derive(Debug)]
 pub enum Stmt {
-    /// Adds two numbers without any type checks.
-    UncheckedNumberAdd {
-        lhs: ValueSource,
-        rhs: ValueSource,
-    },
-    UncheckedNumberLt {
+    /// Applies a numeric binary operation without any type checks.
+    UncheckedNumberBinOp {
+        op: UncheckedNumberBinOp,
         lhs: ValueSource,
         rhs: ValueSource,
     },

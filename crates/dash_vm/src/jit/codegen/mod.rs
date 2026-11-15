@@ -10,12 +10,14 @@ use crate::Vm;
 use crate::frame::Ip;
 use crate::jit::codegen::backend::{
     PrologueData, REG_ARG1, REG_ARG2, REG_ARG3, REG_ARG4, REG_RETURN32, REG_RETURN64, REG_STACK_RELATIVE, Register,
-    Scale, add_reg_imm, addsd_reg_mem_disp, addsd_reg_mem_sib, and_reg_imm, call_reg, call_reg_disp, cmp_reg_al_imm8,
-    cmp_reg_imm32, codegen_epilogue, codegen_prologue, decq_mem, incq_mem, je_branch_target, je_synthetic_label,
-    jmp_block, jmp_branch_target, jmp_synthetic_label, jne_synthetic_label, mov_mem_imm32, mov_mem_reg_scaled,
-    mov_reg_imm32, mov_reg_mem_disp, mov_reg_mem_sib, mov_reg_reg, movsd_mem_sib_reg, movsd_reg_mem_disp,
-    movsd_reg_mem_sib, not_reg, orq_mem_reg, patch_sites_to, register_synthetic_block, register_user_block, seta_reg,
-    shr_imm8, test_reg_mem_disp, test_reg_reg, ucomisd_reg_mem_disp, ucomisd_reg_mem_sib, usable_callee_saved_regs,
+    Scale, add_reg_imm, addsd_reg_mem_disp, addsd_reg_mem_sib, and_reg_imm, and_reg_reg, call_reg, call_reg_disp,
+    cmp_reg_al_imm8, cmp_reg_imm32, codegen_epilogue, codegen_prologue, decq_mem, divsd_reg_mem_disp,
+    divsd_reg_mem_sib, incq_mem, je_branch_target, je_synthetic_label, jmp_block, jmp_branch_target,
+    jmp_synthetic_label, jne_synthetic_label, mov_mem_imm32, mov_mem_reg_scaled, mov_reg_imm32, mov_reg_mem_disp,
+    mov_reg_mem_sib, mov_reg_reg, movsd_mem_sib_reg, movsd_reg_mem_disp, movsd_reg_mem_sib, mulsd_reg_mem_disp,
+    mulsd_reg_mem_sib, not_reg, or_reg_reg, orq_mem_reg, patch_sites_to, register_synthetic_block, register_user_block,
+    seta_reg, setae_reg, sete_reg, setne_reg, setnp_reg, setp_reg, shr_imm8, subsd_reg_mem_disp, subsd_reg_mem_sib,
+    test_reg_mem_disp, test_reg_reg, ucomisd_reg_mem_disp, ucomisd_reg_mem_sib, usable_callee_saved_regs,
     usable_caller_saved_gprs, usable_fprs, xor_reg_reg,
 };
 use crate::jit::codegen::codebuffer::CodeBuffer;
@@ -25,7 +27,7 @@ use crate::jit::dataflow::value::ValueType;
 use crate::jit::dataflow::{DataflowEngine, StmtOrTerminator};
 use crate::jit::ir::{
     BasicBlockId, Body, BranchTarget, ConditionalGotoCondition, ConditionalGotoPopPolicy, GenericStmt, Stmt,
-    Terminator, UncheckedAssignmentKind, ValueSource,
+    Terminator, UncheckedAssignmentKind, UncheckedNumberBinOp, ValueSource,
 };
 use crate::jit::mmap::MmapFn;
 use crate::jit::passes::Assumption;
@@ -379,71 +381,7 @@ impl<'a> CodegenCx<'a> {
                         self.codegen_handler_stub(Instruction::DynamicPropAssign, ip)
                     }
                 },
-                Stmt::UncheckedNumberAdd { lhs, rhs } => {
-                    let OpStackLayout {
-                        lhs,
-                        rhs,
-                        result_offset,
-                        len_change,
-                    } = OpStackLayout::for_binop(lhs, rhs);
-
-                    let len_reg = self.caller_gpr64();
-                    let stack_ptr_reg = self.caller_gpr64();
-                    let fpr = self.fpr();
-
-                    self.codegen_ld_stack_base(stack_ptr_reg);
-                    self.codegen_ld_stack_len(len_reg);
-
-                    match lhs {
-                        ResolvedValueSource::Stack(StackLenRelative(lhs)) => {
-                            movsd_reg_mem_sib(
-                                &mut self.buf,
-                                fpr,
-                                stack_ptr_reg,
-                                len_reg,
-                                Scale::target_pointer_with(),
-                                lhs,
-                            );
-                        }
-                        ResolvedValueSource::Float(lhs) => {
-                            self.codegen_ld_f64(fpr, lhs);
-                        }
-                    }
-
-                    match rhs {
-                        ResolvedValueSource::Stack(StackLenRelative(rhs)) => {
-                            addsd_reg_mem_sib(
-                                &mut self.buf,
-                                fpr,
-                                stack_ptr_reg,
-                                len_reg,
-                                Scale::target_pointer_with(),
-                                rhs,
-                            );
-                        }
-                        ResolvedValueSource::Float(rhs) => {
-                            let patch_site = addsd_reg_mem_disp(&mut self.buf, fpr, Register::Rip, 0);
-                            self.codegen_f64_rip_offset(rhs, patch_site);
-                        }
-                    }
-
-                    movsd_mem_sib_reg(
-                        &mut self.buf,
-                        fpr,
-                        stack_ptr_reg,
-                        len_reg,
-                        Scale::target_pointer_with(),
-                        result_offset,
-                    );
-
-                    let stack_len_offset = self.stack_len_offset();
-                    self.apply_length_change(len_change, stack_len_offset);
-
-                    self.add_fpr(fpr);
-                    self.add_caller_reg(stack_ptr_reg);
-                    self.add_caller_reg(len_reg);
-                }
-                Stmt::UncheckedNumberLt { lhs, rhs } => {
+                Stmt::UncheckedNumberBinOp { op, lhs, rhs } => {
                     let OpStackLayout {
                         lhs,
                         rhs,
@@ -453,69 +391,187 @@ impl<'a> CodegenCx<'a> {
 
                     let stack_ptr_reg = self.caller_gpr64();
                     let len_reg = self.caller_gpr64();
-                    let status_reg = self.caller_gpr64();
-
-                    let status32_reg = status_reg.to_32();
-                    let status8_reg = status_reg.to_8();
                     let fpr = self.fpr();
 
                     self.codegen_ld_stack_base(stack_ptr_reg);
                     self.codegen_ld_stack_len(len_reg);
 
-                    match rhs {
-                        ResolvedValueSource::Stack(StackLenRelative(stack_off)) => {
-                            movsd_reg_mem_sib(
+                    match op {
+                        UncheckedNumberBinOp::Add
+                        | UncheckedNumberBinOp::Sub
+                        | UncheckedNumberBinOp::Mul
+                        | UncheckedNumberBinOp::Div => {
+                            let sib_op: fn(&mut CodeBuffer, Register, Register, Register, Scale, i32) = match op {
+                                UncheckedNumberBinOp::Add => addsd_reg_mem_sib,
+                                UncheckedNumberBinOp::Sub => subsd_reg_mem_sib,
+                                UncheckedNumberBinOp::Mul => mulsd_reg_mem_sib,
+                                UncheckedNumberBinOp::Div => divsd_reg_mem_sib,
+                                _ => unreachable!(),
+                            };
+                            let disp_op: fn(&mut CodeBuffer, Register, Register, i32) -> CpuIp = match op {
+                                UncheckedNumberBinOp::Add => addsd_reg_mem_disp,
+                                UncheckedNumberBinOp::Sub => subsd_reg_mem_disp,
+                                UncheckedNumberBinOp::Mul => mulsd_reg_mem_disp,
+                                UncheckedNumberBinOp::Div => divsd_reg_mem_disp,
+                                _ => unreachable!(),
+                            };
+
+                            match lhs {
+                                ResolvedValueSource::Stack(StackLenRelative(lhs)) => {
+                                    movsd_reg_mem_sib(
+                                        &mut self.buf,
+                                        fpr,
+                                        stack_ptr_reg,
+                                        len_reg,
+                                        Scale::target_pointer_with(),
+                                        lhs,
+                                    );
+                                }
+                                ResolvedValueSource::Float(lhs) => {
+                                    self.codegen_ld_f64(fpr, lhs);
+                                }
+                            }
+
+                            match rhs {
+                                ResolvedValueSource::Stack(StackLenRelative(rhs)) => {
+                                    sib_op(
+                                        &mut self.buf,
+                                        fpr,
+                                        stack_ptr_reg,
+                                        len_reg,
+                                        Scale::target_pointer_with(),
+                                        rhs,
+                                    );
+                                }
+                                ResolvedValueSource::Float(rhs) => {
+                                    let patch_site = disp_op(&mut self.buf, fpr, Register::Rip, 0);
+                                    self.codegen_f64_rip_offset(rhs, patch_site);
+                                }
+                            }
+
+                            movsd_mem_sib_reg(
                                 &mut self.buf,
                                 fpr,
                                 stack_ptr_reg,
                                 len_reg,
                                 Scale::target_pointer_with(),
-                                stack_off,
+                                result_offset,
                             );
                         }
-                        ResolvedValueSource::Float(rhs) => {
-                            self.codegen_ld_f64(fpr, rhs);
-                        }
-                    }
+                        UncheckedNumberBinOp::Gt
+                        | UncheckedNumberBinOp::Ge
+                        | UncheckedNumberBinOp::Lt
+                        | UncheckedNumberBinOp::Le
+                        | UncheckedNumberBinOp::Eq
+                        | UncheckedNumberBinOp::Ne => {
+                            let (first, second) = match op {
+                                UncheckedNumberBinOp::Lt | UncheckedNumberBinOp::Le => (rhs, lhs),
+                                _ => (lhs, rhs),
+                            };
 
-                    xor_reg_reg(&mut self.buf, status32_reg, status32_reg);
+                            let status_reg = self.caller_gpr64();
+                            let status32_reg = status_reg.to_32();
+                            let status8_reg = status_reg.to_8();
 
-                    match lhs {
-                        ResolvedValueSource::Stack(StackLenRelative(stack_off)) => {
-                            ucomisd_reg_mem_sib(
+                            match first {
+                                ResolvedValueSource::Stack(StackLenRelative(stack_off)) => {
+                                    movsd_reg_mem_sib(
+                                        &mut self.buf,
+                                        fpr,
+                                        stack_ptr_reg,
+                                        len_reg,
+                                        Scale::target_pointer_with(),
+                                        stack_off,
+                                    );
+                                }
+                                ResolvedValueSource::Float(first) => {
+                                    self.codegen_ld_f64(fpr, first);
+                                }
+                            }
+
+                            xor_reg_reg(&mut self.buf, status32_reg, status32_reg);
+
+                            // eq/ne needs another temporary reg for a second setcc
+                            let tmp_reg = match op {
+                                UncheckedNumberBinOp::Eq | UncheckedNumberBinOp::Ne => {
+                                    let tmp_reg = self.caller_gpr64();
+                                    let tmp32_reg = tmp_reg.to_32();
+                                    xor_reg_reg(&mut self.buf, tmp32_reg, tmp32_reg);
+                                    Some(tmp_reg)
+                                }
+                                _ => None,
+                            };
+
+                            match second {
+                                ResolvedValueSource::Stack(StackLenRelative(stack_off)) => {
+                                    ucomisd_reg_mem_sib(
+                                        &mut self.buf,
+                                        fpr,
+                                        stack_ptr_reg,
+                                        len_reg,
+                                        Scale::target_pointer_with(),
+                                        stack_off,
+                                    );
+                                }
+                                ResolvedValueSource::Float(second) => {
+                                    let patch_site = ucomisd_reg_mem_disp(&mut self.buf, fpr, Register::Rip, 0);
+                                    self.codegen_f64_rip_offset(second, patch_site);
+                                }
+                            }
+
+                            match op {
+                                UncheckedNumberBinOp::Gt | UncheckedNumberBinOp::Lt => {
+                                    seta_reg(&mut self.buf, status8_reg);
+                                }
+                                UncheckedNumberBinOp::Ge | UncheckedNumberBinOp::Le => {
+                                    setae_reg(&mut self.buf, status8_reg);
+                                }
+                                UncheckedNumberBinOp::Eq | UncheckedNumberBinOp::Ne => {
+                                    let tmp_reg = tmp_reg.unwrap();
+
+                                    match op {
+                                        UncheckedNumberBinOp::Eq => {
+                                            sete_reg(&mut self.buf, status8_reg);
+                                            setnp_reg(&mut self.buf, tmp_reg.to_8());
+                                            and_reg_reg(&mut self.buf, status32_reg, tmp_reg.to_32());
+                                        }
+                                        UncheckedNumberBinOp::Ne => {
+                                            setne_reg(&mut self.buf, status8_reg);
+                                            setp_reg(&mut self.buf, tmp_reg.to_8());
+                                            or_reg_reg(&mut self.buf, status32_reg, tmp_reg.to_32());
+                                        }
+                                        _ => unreachable!(),
+                                    }
+                                }
+                                _ => unreachable!(),
+                            }
+
+                            if let Some(tmp_reg) = tmp_reg {
+                                self.add_caller_reg(tmp_reg);
+                            }
+
+                            let or_patch_site = orq_mem_reg(&mut self.buf, status_reg, Register::Rip, 0);
+                            self.codegen_u64_rip_offset(Value::BOOLEAN_MASK, or_patch_site);
+
+                            mov_mem_reg_scaled(
                                 &mut self.buf,
-                                fpr,
+                                status_reg,
                                 stack_ptr_reg,
                                 len_reg,
                                 Scale::target_pointer_with(),
-                                stack_off,
+                                result_offset,
                             );
-                        }
-                        ResolvedValueSource::Float(lhs) => {
-                            let patch_site = ucomisd_reg_mem_disp(&mut self.buf, fpr, Register::Rip, 0);
-                            self.codegen_f64_rip_offset(lhs, patch_site);
+
+                            self.add_caller_reg(status_reg);
                         }
                     }
-
-                    seta_reg(&mut self.buf, status8_reg);
-                    let or_patch_site = orq_mem_reg(&mut self.buf, status_reg, Register::Rip, 0);
-                    self.codegen_u64_rip_offset(Value::BOOLEAN_MASK, or_patch_site);
-
-                    mov_mem_reg_scaled(
-                        &mut self.buf,
-                        status_reg,
-                        stack_ptr_reg,
-                        len_reg,
-                        Scale::target_pointer_with(),
-                        result_offset,
-                    );
 
                     let stack_len_offset = self.stack_len_offset();
                     self.apply_length_change(len_change, stack_len_offset);
 
                     self.add_fpr(fpr);
-                    self.add_caller_reg(len_reg);
                     self.add_caller_reg(stack_ptr_reg);
+                    self.add_caller_reg(len_reg);
                 }
                 Stmt::Pop => {
                     let stack_len_offset = self.stack_len_offset();

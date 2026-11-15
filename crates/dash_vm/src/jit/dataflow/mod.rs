@@ -10,7 +10,7 @@ use crate::jit::dataflow::join::{Join, JoinChange, join_slice};
 use crate::jit::dataflow::value::{ValueMetadata, ValueType};
 use crate::jit::ir::{
     BasicBlockId, Body, BranchTarget, ConditionalGotoPopPolicy, GenericStmt, Stmt, StmtId, Terminator,
-    UncheckedAssignmentKind, ValueSource,
+    UncheckedAssignmentKind, UncheckedNumberBinOp, ValueSource,
 };
 use crate::localscope::LocalScope;
 use crate::value::{Unpack, ValueKind};
@@ -444,21 +444,25 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
                 state.stack.push(out_ty);
             }
         },
-        Stmt::UncheckedNumberAdd { lhs, rhs } => {
+        Stmt::UncheckedNumberBinOp { op, lhs, rhs } => {
             let lhs = value_metadata_from_source(state, lhs);
             let rhs = value_metadata_from_source(state, rhs);
 
-            let out_ty = ValueMetadata { ty: ValueType::Number };
-            assert!(lhs == out_ty && rhs == out_ty);
-            state.stack.push(out_ty);
-        }
-        Stmt::UncheckedNumberLt { lhs, rhs } => {
-            let lhs = value_metadata_from_source(state, lhs);
-            let rhs = value_metadata_from_source(state, rhs);
+            assert!(lhs.ty == ValueType::Number && rhs.ty == ValueType::Number);
 
-            let out_ty = ValueMetadata { ty: ValueType::Boolean };
-            assert!(lhs == rhs && rhs.ty == ValueType::Number);
-            state.stack.push(out_ty);
+            let out_ty = match op {
+                UncheckedNumberBinOp::Add
+                | UncheckedNumberBinOp::Sub
+                | UncheckedNumberBinOp::Mul
+                | UncheckedNumberBinOp::Div => ValueType::Number,
+                UncheckedNumberBinOp::Gt
+                | UncheckedNumberBinOp::Ge
+                | UncheckedNumberBinOp::Lt
+                | UncheckedNumberBinOp::Le
+                | UncheckedNumberBinOp::Eq
+                | UncheckedNumberBinOp::Ne => ValueType::Boolean,
+            };
+            state.stack.push(ValueMetadata { ty: out_ty });
         }
         Stmt::Pop => drop(state.stack.pop().unwrap()),
         Stmt::LdLocal(local) => state.stack.push(state.locals[local].clone()),
