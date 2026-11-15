@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794681293436,
+  "lastUpdate": 1794766052481,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -14147,6 +14147,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 18339424,
             "range": "± 134705",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "fa5d6159ebb1865501a7fa7893ca4b304e25bf41",
+          "message": "jit: implement specializations for sub/mul/div/gt/ge/lt/le/eq/ne",
+          "timestamp": "2026-11-15T19:03:01+01:00",
+          "tree_id": "8178d9c4d094154df86ceee6cfe3831a17b55e80",
+          "url": "https://github.com/y21/dash/commit/fa5d6159ebb1865501a7fa7893ca4b304e25bf41"
+        },
+        "date": 1794766051610,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 1168071,
+            "range": "± 13927",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 121806,
+            "range": "± 1124",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 68595,
+            "range": "± 823",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1699062,
+            "range": "± 19661",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 19639433,
+            "range": "± 135054",
             "unit": "ns/iter"
           }
         ]
