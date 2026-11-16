@@ -282,36 +282,17 @@ impl<'a> CodegenCx<'a> {
             match self.body.blocks[block].stmts[stmt] {
                 Stmt::Generic(ref generic_stmt, ip) => match *generic_stmt {
                     GenericStmt::StoreLocal { .. } => self.codegen_handler_stub(Instruction::StoreLocal, ip),
-                    GenericStmt::LtNumLConstR32(_)
-                    | GenericStmt::PostfixIncLocalNum(_)
-                    | GenericStmt::PostfixDecLocalNum(_)
+                    GenericStmt::PostfixDecLocalNum(_)
                     | GenericStmt::PrefixIncLocalNum(_)
                     | GenericStmt::PrefixDecLocalNum(_)
-                    | GenericStmt::AddNumLR
-                    | GenericStmt::SubNumLR
-                    | GenericStmt::MulNumLR
-                    | GenericStmt::DivNumLR
                     | GenericStmt::RemNumLR
                     | GenericStmt::PowNumLR
-                    | GenericStmt::GtNumLR
-                    | GenericStmt::GeNumLR
-                    | GenericStmt::LtNumLR
-                    | GenericStmt::LeNumLR
-                    | GenericStmt::EqNumLR
-                    | GenericStmt::NeNumLR
                     | GenericStmt::BitOrNumLR
                     | GenericStmt::BitXorNumLR
                     | GenericStmt::BitAndNumLR
                     | GenericStmt::BitShlNumLR
                     | GenericStmt::BitShrNumLR
-                    | GenericStmt::BitUshrNumLR
-                    | GenericStmt::GtNumLConstR(_)
-                    | GenericStmt::GtNumLConstR32(_)
-                    | GenericStmt::GeNumLConstR(_)
-                    | GenericStmt::GeNumLConstR32(_)
-                    | GenericStmt::LtNumLConstR(_)
-                    | GenericStmt::LeNumLConstR(_)
-                    | GenericStmt::LeNumLConstR32(_) => self.codegen_handler_stub(Instruction::IntrinsicOp, ip),
+                    | GenericStmt::BitUshrNumLR => self.codegen_handler_stub(Instruction::IntrinsicOp, ip),
                     GenericStmt::Number(_) => self.codegen_handler_stub(Instruction::Number, ip),
                     GenericStmt::Lt => self.codegen_handler_stub(Instruction::Lt, ip),
                     GenericStmt::Add => self.codegen_handler_stub(Instruction::Add, ip),

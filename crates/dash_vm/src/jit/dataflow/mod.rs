@@ -162,12 +162,7 @@ fn value_metadata_from_source(state: &mut BlockState, source: ValueSource) -> Va
 fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
     match *stmt {
         Stmt::Generic(ref stmt, _) => match *stmt {
-            GenericStmt::LtNumLConstR32(_) => {
-                state.stack.pop().unwrap();
-                state.stack.push(ValueMetadata { ty: ValueType::Boolean });
-            }
             GenericStmt::Number(_) => state.stack.push(ValueMetadata { ty: ValueType::Number }),
-            GenericStmt::PostfixIncLocalNum(_) => state.stack.push(ValueMetadata { ty: ValueType::Number }),
             GenericStmt::StoreLocal { kind, local } => {
                 let out_ty = match kind {
                     AssignKind::Assignment => {
@@ -247,10 +242,6 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
             | GenericStmt::BitShl
             | GenericStmt::BitShr
             | GenericStmt::BitUshr
-            | GenericStmt::AddNumLR
-            | GenericStmt::SubNumLR
-            | GenericStmt::MulNumLR
-            | GenericStmt::DivNumLR
             | GenericStmt::RemNumLR
             | GenericStmt::PowNumLR
             | GenericStmt::BitOrNumLR
@@ -273,13 +264,7 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
             | GenericStmt::StrictNe
             | GenericStmt::ObjIn
             | GenericStmt::InstanceOf
-            | GenericStmt::DeletePropertyDynamic
-            | GenericStmt::GtNumLR
-            | GenericStmt::GeNumLR
-            | GenericStmt::LtNumLR
-            | GenericStmt::LeNumLR
-            | GenericStmt::EqNumLR
-            | GenericStmt::NeNumLR => {
+            | GenericStmt::DeletePropertyDynamic            => {
                 state.stack.pop().unwrap();
                 state.stack.pop().unwrap();
                 let out_ty = ValueMetadata { ty: ValueType::Boolean };
@@ -295,14 +280,7 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
                 let out_ty = ValueMetadata { ty: ValueType::Boolean };
                 state.stack.push(out_ty);
             }
-            GenericStmt::DeletePropertyStatic
-            | GenericStmt::GtNumLConstR(_)
-            | GenericStmt::GtNumLConstR32(_)
-            | GenericStmt::GeNumLConstR(_)
-            | GenericStmt::GeNumLConstR32(_)
-            | GenericStmt::LtNumLConstR(_)
-            | GenericStmt::LeNumLConstR(_)
-            | GenericStmt::LeNumLConstR32(_) => {
+            GenericStmt::DeletePropertyStatic => {
                 state.stack.pop().unwrap();
                 let out_ty = ValueMetadata { ty: ValueType::Boolean };
                 state.stack.push(out_ty);
