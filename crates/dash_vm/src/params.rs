@@ -15,7 +15,7 @@ use super::value::Value;
 pub type MathRandomCallback = fn(vm: &mut Vm) -> Result<f64, Unrooted>;
 pub type TimeMillisCallback = fn(vm: &mut Vm) -> Result<u64, Unrooted>;
 pub type StaticImportCallback = fn(vm: &mut Vm, ty: StaticImportKind, path: JsString) -> Result<Unrooted, Unrooted>;
-pub type DynamicImportCallback = fn(vm: &mut Vm, val: Value) -> Result<Unrooted, Unrooted>;
+pub type DynamicImportCallback = fn(vm: &mut Vm, val: Value, options: Option<Value>) -> Result<Unrooted, Unrooted>;
 pub type DebuggerCallback = fn(vm: &mut Vm) -> Result<(), Value>;
 pub type UnhandledTaskException = fn(vm: &mut LocalScope, exception: Value, source: UncaughtExceptionSource);
 

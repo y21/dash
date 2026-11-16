@@ -63,8 +63,26 @@ pub enum ExprKind {
     /// Compiled bytecode
     #[display("<compiled>")]
     Compiled(Vec<u8>),
+    /// A dynamic import expression, i.e. `import(specifier, options)`
+    Import(DynamicImport),
     /// An empty expression
     Empty,
+}
+
+#[derive(Debug, Clone)]
+pub struct DynamicImport {
+    pub specifier: Box<Expr>,
+    pub options: Option<Box<Expr>>,
+}
+
+impl fmt::Display for DynamicImport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "import({}", self.specifier)?;
+        if let Some(options) = &self.options {
+            write!(f, ", {}", options)?;
+        }
+        write!(f, ")")
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -127,8 +127,6 @@ pub enum SpecifierKind {
 /// Type of import statement
 #[derive(Debug, Clone, Display)]
 pub enum ImportKind {
-    #[display("import({_0})")]
-    Dynamic(Expr),
     /// import foo from "bar"
     #[display("import {_0} from \"{_1}\"")]
     DefaultAs(SpecifierKind, Symbol),
@@ -170,7 +168,6 @@ impl ImportKind {
     /// Attempts to return the underlying [SpecifierKind], if present
     pub fn get_specifier(&self) -> Option<&SpecifierKind> {
         match self {
-            Self::Dynamic(_) => None,
             Self::DefaultAs(s, _) => Some(s),
             Self::AllAs(s, _) => Some(s),
         }

@@ -12,7 +12,7 @@ use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{
     ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, BinaryExpr, CallArgumentKind, ConditionalExpr,
-    Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind,
+    DynamicImport, Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind,
     OptionalChainingComponent, OptionalChainingExpression, Postfix, PropertyAccessExpr, Seq, UnaryExpr,
 };
 use dash_middle::parser::statement::{
@@ -578,6 +578,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             ExprKind::YieldStar(e) => self.visit_yield_star(span, e),
             ExprKind::Empty => self.visit_empty_expr(),
             ExprKind::NewTarget => self.visit_new_target(span),
+            ExprKind::Import(e) => self.visit_dynamic_import(span, e),
         }
     }
 
@@ -2030,14 +2031,24 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         )
     }
 
+    fn visit_dynamic_import(&mut self, _: Span, import: DynamicImport) -> Result<(), Error> {
+        let mut ib = InstructionBuilder::new(self);
+        ib.accept_expr(*import.specifier)?;
+
+        if let Some(options) = import.options {
+            ib.accept_expr(*options)?;
+            ib.build_dynamic_import(true);
+        } else {
+            ib.build_dynamic_import(false);
+        }
+
+        Ok(())
+    }
+
     fn visit_import_statement(&mut self, span: Span, import: ImportKind) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         match import {
-            ImportKind::Dynamic(ex) => {
-                ib.accept_expr(ex)?;
-                ib.build_dynamic_import();
-            }
             ref kind @ (ImportKind::DefaultAs(SpecifierKind::Ident(sym), path)
             | ImportKind::AllAs(SpecifierKind::Ident(sym), path)) => {
                 let local_id = ib.find_local_from_binding(sym);
@@ -2052,7 +2063,6 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
                     match kind {
                         ImportKind::DefaultAs(..) => StaticImportKind::Default,
                         ImportKind::AllAs(..) => StaticImportKind::All,
-                        _ => unreachable!(),
                     },
                     local_id,
                     path_id,

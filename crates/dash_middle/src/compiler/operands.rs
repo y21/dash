@@ -924,6 +924,7 @@ define_operand_struct_with_source! {
 define_operand_struct_with_source! {
     type Exception = Infallible;
     struct ImportDynOperands<S: ExtractSource> {
+        pub options: OptionDiscriminatedByte<S::Value>,
         pub value: S::Value
     }
 }

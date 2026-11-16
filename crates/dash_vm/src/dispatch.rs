@@ -1761,15 +1761,17 @@ mod handlers {
     }
 
     pub fn import_dyn(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let ImportDynOperands { value } = extract_back_infallible(&mut cx);
+        let ImportDynOperands {
+            value,
+            options: OptionDiscriminatedByte(options),
+        } = extract_back_infallible(&mut cx);
 
-        let _ret = match cx.params.dynamic_import_callback {
-            Some(cb) => cb(&mut cx, value)?,
+        let ret = match cx.params.dynamic_import_callback {
+            Some(cb) => cb(&mut cx, value, options)?,
             None => throw!(cx, Error, "Dynamic imports are disabled for this context"),
         };
 
-        // TODO: dynamic imports are currently statements, making them useless
-        // TODO: make them an expression and push ret on stack
+        cx.push_stack(ret);
 
         Ok(None)
     }

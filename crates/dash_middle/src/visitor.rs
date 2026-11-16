@@ -1,7 +1,8 @@
 use crate::interner::Symbol;
 use crate::parser::expr::{
-    ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr,
-    ObjectLiteral, OptionalChainingExpression, Postfix, Prefix, PropertyAccessExpr, Seq, UnaryExpr,
+    ArrayLiteral, AssignmentExpr, BinaryExpr, ConditionalExpr, DynamicImport, Expr, ExprKind, FunctionCall,
+    GroupingExpr, LiteralExpr, ObjectLiteral, OptionalChainingExpression, Postfix, Prefix, PropertyAccessExpr, Seq,
+    UnaryExpr,
 };
 use crate::parser::statement::{
     BlockStatement, Class, DoWhileLoop, ExportKind, ForInLoop, ForLoop, ForOfLoop, FunctionDeclaration, IfStatement,
@@ -147,6 +148,9 @@ pub trait Visitor<V> {
 
     /// Visits the `new.target` expression
     fn visit_new_target(&mut self, span: Span) -> V;
+
+    /// Visits a dynamic import expression
+    fn visit_dynamic_import(&mut self, span: Span, i: DynamicImport) -> V;
 }
 
 pub fn accept_default<T, V: Visitor<T>>(this: &mut V, Statement { kind, span }: Statement) -> T {
@@ -202,5 +206,6 @@ where
         ExprKind::YieldStar(e) => this.visit_yield_star(span, e),
         ExprKind::Chaining(c) => this.visit_optional_chaining_expression(span, c),
         ExprKind::NewTarget => this.visit_new_target(span),
+        ExprKind::Import(i) => this.visit_dynamic_import(span, i),
     }
 }

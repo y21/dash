@@ -20,7 +20,8 @@ impl Parser<'_, '_> {
     pub fn parse_statement(&mut self) -> Option<Statement> {
         self.error_sync = false;
         let lo_span = self.current()?.span;
-        let kind = match self.next()?.ty {
+        let ty = self.next()?.ty;
+        let kind = match ty {
             TokenType::Let | TokenType::Const | TokenType::Var => self.parse_variable().map(StatementKind::Variable),
             TokenType::If => self.parse_if(true).map(StatementKind::If),
             TokenType::Function => self.parse_function(false).map(|(k, _)| StatementKind::Function(k)),
@@ -36,7 +37,9 @@ impl Parser<'_, '_> {
             TokenType::Throw => self.parse_throw().map(StatementKind::Throw),
             TokenType::Return => self.parse_return().map(StatementKind::Return),
             TokenType::For => self.parse_for_loop().map(StatementKind::Loop),
-            TokenType::Import => self.parse_import().map(StatementKind::Import),
+            TokenType::Import if self.current().is_some_and(|tok| tok.ty != TokenType::LeftParen) => {
+                self.parse_import().map(StatementKind::Import)
+            }
             TokenType::Export => self.parse_export().map(StatementKind::Export),
             TokenType::Class => self.parse_class().map(StatementKind::Class),
             TokenType::Switch => self.parse_switch().map(StatementKind::Switch),
@@ -270,14 +273,6 @@ impl Parser<'_, '_> {
     }
 
     fn parse_import(&mut self) -> Option<ImportKind> {
-        // `import` followed by ( is considered a dynamic import
-        let is_dynamic = self.eat(TokenType::LeftParen, false).is_some();
-        if is_dynamic {
-            let specifier = self.parse_expression()?;
-            self.eat(TokenType::RightParen, true)?;
-            return Some(ImportKind::Dynamic(specifier));
-        }
-
         // `import` followed by a `*` imports all exported values
         let is_import_all = self.eat(TokenType::Star, false).is_some();
         if is_import_all {

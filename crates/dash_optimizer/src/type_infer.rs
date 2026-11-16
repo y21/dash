@@ -9,7 +9,7 @@ use dash_middle::interner::{Symbol, sym};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::{
     ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, BinaryExpr, CallArgumentKind, ConditionalExpr,
-    Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind,
+    DynamicImport, Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind,
     OptionalChainingComponent, OptionalChainingExpression, PropertyAccessExpr, UnaryExpr,
 };
 use dash_middle::parser::statement::{
@@ -178,7 +178,6 @@ impl<'s> TypeInferCtx<'s> {
             StatementKind::Return(stmt) => self.visit_return_statement(stmt),
             StatementKind::Try(stmt) => self.visit_try_statement(stmt),
             StatementKind::Throw(expr) => drop(self.visit(expr)),
-            StatementKind::Import(ImportKind::Dynamic(expr)) => drop(self.visit(expr)),
             StatementKind::Import(
                 ImportKind::DefaultAs(SpecifierKind::Ident(sym), ..) | ImportKind::AllAs(SpecifierKind::Ident(sym), ..),
             ) => self.add_local(*sym, VariableDeclarationKind::Var, None),
@@ -411,6 +410,13 @@ impl<'s> TypeInferCtx<'s> {
             ExprKind::Compiled(..) => None,
             ExprKind::Empty => None,
             ExprKind::NewTarget => None,
+            ExprKind::Import(DynamicImport { specifier, options }) => {
+                self.visit(specifier);
+                if let Some(options) = options {
+                    self.visit(options);
+                }
+                None
+            }
             ExprKind::YieldStar(e) => {
                 self.visit(e);
                 None

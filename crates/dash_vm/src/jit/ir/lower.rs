@@ -12,10 +12,10 @@ use dash_middle::compiler::operands::{
     JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands,
     JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands, LdLocalOperands, LeOperands, LoopBackjumpOperands,
     LtOperands, MulOperands, NeOperands, NegOperands, NotOperands, NumberConstantOperands, NumberConstantWide,
-    NumberInline8, NumberInline32, ObjectInOperands, PopOperands, PosOperands, PowOperands, RegexConstantOperands,
-    RemOperands, StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalExtOperands, StoreLocalOperands,
-    StrictEqOperands, StrictNeOperands, StringConstantOperands, SubOperands, SymbolConstantWide, ThrowOperands,
-    TypeofIdentOperands, TypeofOperands,
+    NumberInline8, NumberInline32, ObjectInOperands, OptionDiscriminatedByte, PopOperands, PosOperands, PowOperands,
+    RegexConstantOperands, RemOperands, StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalExtOperands,
+    StoreLocalOperands, StrictEqOperands, StrictNeOperands, StringConstantOperands, SubOperands, SymbolConstantWide,
+    ThrowOperands, TypeofIdentOperands, TypeofOperands,
 };
 use dash_middle::compiler::scope::BackLocalId;
 use dash_middle::indexvec::IndexVec;
@@ -435,7 +435,10 @@ fn lower_from_ip(
             InstructionOperands::ExportDefault(ExportDefaultOperands { value: () }) => {
                 stmts.push(Stmt::Generic(GenericStmt::ExportDefault, instr_ip));
             }
-            InstructionOperands::ImportDyn(ImportDynOperands { value: () }) => {
+            InstructionOperands::ImportDyn(ImportDynOperands {
+                value: (),
+                options: OptionDiscriminatedByte(_),
+            }) => {
                 stmts.push(Stmt::Generic(GenericStmt::ImportDyn, instr_ip));
             }
             InstructionOperands::Throw(ThrowOperands { value: () }) => {

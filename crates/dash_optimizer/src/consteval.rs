@@ -4,7 +4,7 @@ use dash_middle::interner::{StringInterner, sym};
 use dash_middle::lexer::token::TokenType;
 use dash_middle::parser::expr::{
     ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, BinaryExpr, CallArgumentKind, ConditionalExpr,
-    Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind,
+    DynamicImport, Expr, ExprKind, FunctionCall, GroupingExpr, LiteralExpr, ObjectLiteral, ObjectMemberKind,
     OptionalChainingExpression, PropertyAccessExpr, UnaryExpr,
 };
 use dash_middle::parser::statement::{
@@ -60,9 +60,6 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
                 self.visit(expr);
             }
             StatementKind::Import(ImportKind::AllAs(SpecifierKind::Ident(..), ..)) => {}
-            StatementKind::Import(ImportKind::Dynamic(expr)) => {
-                self.visit(expr);
-            }
             StatementKind::Import(ImportKind::DefaultAs(SpecifierKind::Ident(..), ..)) => {}
             StatementKind::Export(ExportKind::Default(expr)) => {
                 self.visit(expr);
@@ -256,6 +253,12 @@ impl<'b, 'interner> ConstFunctionEvalCtx<'b, 'interner> {
             ExprKind::YieldStar(e) => self.visit(e),
             ExprKind::Empty => {}
             ExprKind::NewTarget => {}
+            ExprKind::Import(DynamicImport { specifier, options }) => {
+                self.visit(specifier);
+                if let Some(options) = options {
+                    self.visit(options);
+                }
+            }
         }
     }
 

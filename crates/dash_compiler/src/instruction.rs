@@ -364,8 +364,9 @@ impl InstructionBuilder<'_, '_> {
         self.writew(path_id.0);
     }
 
-    pub fn build_dynamic_import(&mut self) {
+    pub fn build_dynamic_import(&mut self, has_options: bool) {
         self.write_instr(Instruction::ImportDyn);
+        self.write(has_options as u8);
     }
 
     pub fn build_static_delete(&mut self, id: SymbolConstant) {

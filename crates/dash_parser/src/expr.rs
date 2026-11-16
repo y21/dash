@@ -2,8 +2,9 @@ use dash_middle::interner::{Symbol, sym};
 use dash_middle::lexer::token::{ASSIGNMENT_TYPES, Token, TokenType};
 use dash_middle::parser::error::Error;
 use dash_middle::parser::expr::{
-    ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, CallArgumentKind, Expr, ExprKind, LiteralExpr,
-    ObjectLiteral, ObjectMemberKind, OptionalChainingComponent, OptionalChainingExpression, PropertyAccessExpr,
+    ArrayLiteral, ArrayMemberKind, AssignmentExpr, AssignmentTarget, CallArgumentKind, DynamicImport, Expr, ExprKind,
+    LiteralExpr, ObjectLiteral, ObjectMemberKind, OptionalChainingComponent, OptionalChainingExpression,
+    PropertyAccessExpr,
 };
 use dash_middle::parser::statement::{
     Asyncness, BlockStatement, FunctionDeclaration, FunctionKind, Parameter, Pattern, ReturnStatement, Statement,
@@ -896,6 +897,27 @@ impl Parser<'_, '_> {
                 Expr {
                     span: current.span,
                     kind: ExprKind::regex_literal(regex, literal),
+                }
+            }
+            TokenType::Import => {
+                self.eat(TokenType::LeftParen, true)?;
+
+                let specifier = self.parse_expression_no_comma()?;
+
+                let options = if self.eat(TokenType::Comma, false).is_some() {
+                    // Second argument: options
+                    Some(self.parse_expression_no_comma()?)
+                } else {
+                    None
+                };
+                self.eat(TokenType::RightParen, true)?;
+
+                Expr {
+                    span: current.span.to(self.previous().unwrap().span),
+                    kind: ExprKind::Import(DynamicImport {
+                        specifier: Box::new(specifier),
+                        options: options.map(Box::new),
+                    }),
                 }
             }
             other if other.is_identifier() => {
