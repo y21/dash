@@ -4,7 +4,7 @@ members = [
     "crates/dash_lexer",
     "crates/dash_parser",
     "crates/dash_compiler",
-    "crates/dash_optimizer",
+    "crates/dash_ast_passes",
     "crates/dash_vm",
     "cli",
     "testrunner",

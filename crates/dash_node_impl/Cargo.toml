@@ -12,7 +12,7 @@ dash_middle = { path = "../dash_middle" }
 dash_vm = { path = "../dash_vm" }
 dash_parser = { path = "../dash_parser", features = ["from_string"] }
 dash_rt = { path = "../dash_rt" }
-dash_optimizer = { path = "../dash_optimizer" }
+dash_ast_passes = { path = "../dash_ast_passes" }
 anyhow = "1.0"
 serde_json = "1.0.103"
 serde = { version = "1.0", features = ["derive"] }

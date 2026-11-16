@@ -3,7 +3,7 @@ use dash_middle::compiler::CompileResult;
 use dash_middle::interner::StringInterner;
 use dash_middle::parser::error::Error;
 use dash_middle::compiler::OptLevel;
-use dash_optimizer::type_infer::name_res;
+use dash_ast_passes::type_infer::name_res;
 use dash_parser::Parser;
 
 use crate::FunctionCompiler;

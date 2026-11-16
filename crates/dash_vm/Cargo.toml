@@ -18,7 +18,7 @@ dash_proc_macro = { path = "../dash_proc_macro" }
 dash_lexer = { path = "../dash_lexer" }
 dash_parser = { path = "../dash_parser" }
 dash_compiler = { path = "../dash_compiler", features = ["from_string"] }
-dash_optimizer = { path = "../dash_optimizer" }
+dash_ast_passes = { path = "../dash_ast_passes" }
 dash_regex = { path = "../dash_regex" }
 dash_log = { path = "../dash_log" }
 bitflags = { version = "2.9.0", features = ["serde"] }

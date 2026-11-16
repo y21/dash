@@ -361,12 +361,12 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
+ "dash_ast_passes",
  "dash_compiler",
  "dash_decompiler",
  "dash_lexer",
  "dash_middle",
  "dash_node_impl",
- "dash_optimizer",
  "dash_parser",
  "dash_rt",
  "dash_rt_modules",
@@ -379,13 +379,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "dash_ast_passes"
+version = "0.3.0"
+dependencies = [
+ "dash_log",
+ "dash_middle",
+]
+
+[[package]]
 name = "dash_compiler"
 version = "0.3.0"
 dependencies = [
+ "dash_ast_passes",
  "dash_lexer",
  "dash_log",
  "dash_middle",
- "dash_optimizer",
  "dash_parser",
  "dash_regex",
  "rustc-hash",
@@ -454,9 +462,9 @@ name = "dash_node_impl"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dash_ast_passes",
  "dash_log",
  "dash_middle",
- "dash_optimizer",
  "dash_parser",
  "dash_proc_macro",
  "dash_rt",
@@ -468,14 +476,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
-]
-
-[[package]]
-name = "dash_optimizer"
-version = "0.3.0"
-dependencies = [
- "dash_log",
- "dash_middle",
 ]
 
 [[package]]
@@ -512,9 +512,9 @@ dependencies = [
 name = "dash_rt"
 version = "0.3.0"
 dependencies = [
+ "dash_ast_passes",
  "dash_compiler",
  "dash_middle",
- "dash_optimizer",
  "dash_proc_macro",
  "dash_vm",
  "nohash",
@@ -610,11 +610,11 @@ dependencies = [
  "arrayvec",
  "bitflags",
  "criterion",
+ "dash_ast_passes",
  "dash_compiler",
  "dash_lexer",
  "dash_log",
  "dash_middle",
- "dash_optimizer",
  "dash_parser",
  "dash_proc_macro",
  "dash_regex",
@@ -2288,7 +2288,7 @@ dependencies = [
  "arrayvec",
  "bumpalo",
  "clap",
- "dash_optimizer",
+ "dash_ast_passes",
  "dash_vm",
  "once_cell",
  "owo-colors",

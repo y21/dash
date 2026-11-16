@@ -8,8 +8,8 @@ use dash_middle::interner::StringInterner;
 use dash_middle::parser::error::IntoFormattableErrors;
 use dash_middle::parser::statement::ScopeId;
 use dash_middle::compiler::OptLevel;
-use dash_optimizer::consteval::ConstFunctionEvalCtx;
-use dash_optimizer::type_infer::name_res;
+use dash_ast_passes::consteval::ConstFunctionEvalCtx;
+use dash_ast_passes::type_infer::name_res;
 
 pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     let dump_ir = *arg.get_one::<bool>("ir").unwrap();

@@ -3,7 +3,7 @@ use dash_lexer::Lexer;
 use dash_middle::compiler::StaticImportKind;
 use dash_middle::interner::sym;
 use dash_middle::compiler::OptLevel;
-use dash_optimizer::type_infer::name_res;
+use dash_ast_passes::type_infer::name_res;
 use dash_parser::Parser;
 
 use crate::frame::Frame;

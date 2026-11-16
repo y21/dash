@@ -1,8 +1,8 @@
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::StaticImportKind;
 use dash_middle::parser::statement::{FuncId, VariableDeclarationName};
-use dash_optimizer::consteval::ConstFunctionEvalCtx;
-use dash_optimizer::type_infer::TypeInferCtx;
+use dash_ast_passes::consteval::ConstFunctionEvalCtx;
+use dash_ast_passes::type_infer::TypeInferCtx;
 use dash_parser::Parser;
 use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
