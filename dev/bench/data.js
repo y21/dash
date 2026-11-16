@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1794862047181,
+  "lastUpdate": 1794862302471,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -14309,6 +14309,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 13780939,
             "range": "± 44767",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "faa49e4ca6a2423e8fec2d7e50aa0d1f62b2b52e",
+          "message": "jit: remove effectively unused generic stmts",
+          "timestamp": "2026-11-16T21:47:08+01:00",
+          "tree_id": "1e4909d60dced359ab3e43cb90dad02e9f2f5c54",
+          "url": "https://github.com/y21/dash/commit/faa49e4ca6a2423e8fec2d7e50aa0d1f62b2b52e"
+        },
+        "date": 1794862301044,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 984752,
+            "range": "± 6263",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 111235,
+            "range": "± 374",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 52882,
+            "range": "± 1038",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1382256,
+            "range": "± 26796",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 18508784,
+            "range": "± 79434",
             "unit": "ns/iter"
           }
         ]
