@@ -16,12 +16,12 @@ pub enum OptLevel {
     Aggressive,
 }
 
-impl From<OptLevel> for dash_optimizer::OptLevel {
+impl From<OptLevel> for dash_middle::compiler::OptLevel {
     fn from(opt_level: OptLevel) -> Self {
         match opt_level {
-            OptLevel::None => dash_optimizer::OptLevel::None,
-            OptLevel::Basic => dash_optimizer::OptLevel::Basic,
-            OptLevel::Aggressive => dash_optimizer::OptLevel::Aggressive,
+            OptLevel::None => dash_middle::compiler::OptLevel::None,
+            OptLevel::Basic => dash_middle::compiler::OptLevel::Basic,
+            OptLevel::Aggressive => dash_middle::compiler::OptLevel::Aggressive,
         }
     }
 }

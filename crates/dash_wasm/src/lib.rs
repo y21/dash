@@ -134,7 +134,7 @@ pub fn infer(s: &str) -> Result<JsValue, String> {
 
     let mut tcx = TypeInferCtx::new(counter);
 
-    let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, dash_optimizer::OptLevel::default());
+    let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, dash_middle::compiler::OptLevel::default());
     cfx.visit_many_statements(&mut ast, FuncId::ROOT);
     let mut out = String::new();
 

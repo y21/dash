@@ -1,5 +1,5 @@
 use dash_middle::parser::error::IntoFormattableErrors;
-use dash_optimizer::OptLevel;
+use dash_middle::compiler::OptLevel;
 use dash_rt::format_value;
 use dash_rt::runtime::Runtime;
 use dash_vm::eval::EvalError;

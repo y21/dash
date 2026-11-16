@@ -2,7 +2,7 @@ use dash_compiler::FunctionCompiler;
 use dash_lexer::Lexer;
 use dash_middle::compiler::StaticImportKind;
 use dash_middle::interner::sym;
-use dash_optimizer::OptLevel;
+use dash_middle::compiler::OptLevel;
 use dash_optimizer::type_infer::name_res;
 use dash_parser::Parser;
 

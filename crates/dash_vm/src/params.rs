@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use dash_middle::compiler::StaticImportKind;
-use dash_optimizer::OptLevel;
+use dash_middle::compiler::OptLevel;
 
 use crate::UncaughtExceptionSource;
 use crate::gc::trace::Trace;

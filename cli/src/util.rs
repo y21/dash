@@ -1,4 +1,4 @@
-use dash_optimizer::OptLevel;
+use dash_middle::compiler::OptLevel;
 use dash_vm::params::VmParams;
 
 pub fn params_from_args(args: &clap::ArgMatches) -> anyhow::Result<VmParams> {

@@ -1,4 +1,5 @@
 use dash_log::debug;
+use dash_middle::compiler::OptLevel;
 use dash_middle::compiler::scope::ScopeGraph;
 use dash_middle::interner::{StringInterner, sym};
 use dash_middle::lexer::token::TokenType;
@@ -13,8 +14,6 @@ use dash_middle::parser::statement::{
     StatementKind, SwitchCase, SwitchStatement, TryCatch, VariableBinding, VariableDeclaration, VariableDeclarations,
     WhileLoop,
 };
-
-use crate::OptLevel;
 
 #[derive(Debug)]
 pub struct ConstFunctionEvalCtx<'b, 'interner> {

@@ -24,7 +24,7 @@ use dash_middle::parser::statement::{
 use dash_middle::sourcemap::Span;
 use dash_middle::util::Counter;
 use dash_middle::visitor::Visitor;
-use dash_optimizer::OptLevel;
+use dash_middle::compiler::OptLevel;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::{InferMode, LocalDeclToSlot, NameResolutionResults, TypeInferCtx};
 use for_each::{ForEachDesugarCtxt, ForEachLoopKind};

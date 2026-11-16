@@ -2,7 +2,7 @@ use std::backtrace::{Backtrace, BacktraceStatus};
 
 use anyhow::bail;
 use clap::{Arg, ArgAction, Command};
-use dash_optimizer::OptLevel;
+use dash_middle::compiler::OptLevel;
 use owo_colors::OwoColorize;
 
 mod cmd;

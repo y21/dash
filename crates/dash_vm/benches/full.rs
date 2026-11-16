@@ -1,7 +1,7 @@
 use criterion::{Criterion, criterion_group, criterion_main};
 use dash_compiler::FunctionCompiler;
 use dash_middle::interner::StringInterner;
-use dash_optimizer::OptLevel;
+use dash_middle::compiler::OptLevel;
 use dash_vm::Vm;
 use dash_vm::frame::Frame;
 use dash_vm::params::VmParams;

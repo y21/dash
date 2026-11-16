@@ -7,7 +7,7 @@ use dash_compiler::transformations;
 use dash_middle::interner::StringInterner;
 use dash_middle::parser::error::IntoFormattableErrors;
 use dash_middle::parser::statement::ScopeId;
-use dash_optimizer::OptLevel;
+use dash_middle::compiler::OptLevel;
 use dash_optimizer::consteval::ConstFunctionEvalCtx;
 use dash_optimizer::type_infer::name_res;
 
