@@ -2,9 +2,9 @@ use std::collections::hash_map::Entry;
 
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::operands::{
-    AddOperands, BinaryOperator, BindThisOperands, BitandOperands, BitnotOperands, BitorOperands, BitshlOperands,
-    BitshrOperands, BitushrOperands, BitxorOperands, BooleanConstantOperands, BooleanConstantWide, CallOperands,
-    CallSymbolIteratorOperands, ConditionalJumpNoPopOperands, ConditionalJumpPopOperands,
+    AddOperands, AssignKind, BinaryOperator, BindThisOperands, BitandOperands, BitnotOperands, BitorOperands,
+    BitshlOperands, BitshrOperands, BitushrOperands, BitxorOperands, BooleanConstantOperands, BooleanConstantWide,
+    CallOperands, CallSymbolIteratorOperands, ConditionalJumpNoPopOperands, ConditionalJumpPopOperands,
     DeletePropertyDynamicOperands, DeletePropertyStaticOperands, DivOperands, DynamicPropertyAssignOperands,
     EqOperands, ExportDefaultOperands, ExportNamedOperands, ForInIteratorOperands, FunctionConstantOperands,
     GeOperands, GtOperands, ImportDynOperands, ImportStaticOperands, InstanceofOperands, InstructionOperands,
@@ -256,6 +256,15 @@ fn lower_from_ip(
             },
             InstructionOperands::Number(NumberConstantOperands(NumberConstantWide(num))) => {
                 stmts.push(Stmt::Generic(GenericStmt::Number(num), instr_ip));
+            }
+            InstructionOperands::StoreLocal(StoreLocalOperands {
+                kind: AssignKind::Assignment(_),
+                local,
+            }) => {
+                stmts.push(Stmt::UncheckedStoreLocal {
+                    kind: UncheckedAssignmentKind::Assignment,
+                    local,
+                });
             }
             InstructionOperands::StoreLocal(StoreLocalOperands { kind, local }) => {
                 stmts.push(Stmt::Generic(

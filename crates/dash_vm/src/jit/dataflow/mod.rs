@@ -166,9 +166,7 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
             GenericStmt::StoreLocal { kind, local } => {
                 let out_ty = match kind {
                     AssignKind::Assignment => {
-                        let value = state.stack.pop().unwrap();
-                        state.locals[local] = value.clone();
-                        value
+                        unreachable!("never constructed, use Stmt::UncheckedStoreLocal for regular assignments")
                     }
                     AssignKind::AddAssignment
                     | AssignKind::SubAssignment
@@ -264,7 +262,7 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
             | GenericStmt::StrictNe
             | GenericStmt::ObjIn
             | GenericStmt::InstanceOf
-            | GenericStmt::DeletePropertyDynamic            => {
+            | GenericStmt::DeletePropertyDynamic => {
                 state.stack.pop().unwrap();
                 state.stack.pop().unwrap();
                 let out_ty = ValueMetadata { ty: ValueType::Boolean };
@@ -445,6 +443,11 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
         Stmt::Pop => drop(state.stack.pop().unwrap()),
         Stmt::LdLocal(local) => state.stack.push(state.locals[local].clone()),
         Stmt::UncheckedStoreLocal { kind, local } => match kind {
+            UncheckedAssignmentKind::Assignment => {
+                let value = state.stack.pop().unwrap();
+                state.locals[local] = value.clone();
+                state.stack.push(value);
+            }
             UncheckedAssignmentKind::NumberPostfixIncrement => {
                 let local = state.locals[local];
                 assert!(local.ty == ValueType::Number);

@@ -636,6 +636,39 @@ impl<'a> CodegenCx<'a> {
                         self.add_caller_reg(stack_base);
                         self.add_caller_reg(stack_len);
                     }
+                    UncheckedAssignmentKind::Assignment => {
+                        let stack_base = self.caller_gpr64();
+                        let stack_len = self.caller_gpr64();
+                        let stack_index = self.caller_gpr64();
+                        let value = self.caller_gpr64();
+
+                        self.codegen_ld_stack_base(stack_base);
+                        self.codegen_ld_stack_len(stack_len);
+                        self.codegen_local_stack_index(local, stack_index);
+
+                        mov_reg_mem_sib(
+                            &mut self.buf,
+                            value,
+                            stack_base,
+                            stack_len,
+                            Scale::target_pointer_with(),
+                            -i32::try_from(size_of::<Value>()).unwrap(),
+                        );
+
+                        mov_mem_reg_scaled(
+                            &mut self.buf,
+                            value,
+                            stack_base,
+                            stack_index,
+                            Scale::target_pointer_with(),
+                            0,
+                        );
+
+                        self.add_caller_reg(stack_base);
+                        self.add_caller_reg(stack_len);
+                        self.add_caller_reg(value);
+                        self.add_caller_reg(stack_index);
+                    }
                 },
             }
         }

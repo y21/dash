@@ -134,6 +134,8 @@ pub enum ValueSource {
 #[derive(Debug, Copy, Clone)]
 pub enum UncheckedAssignmentKind {
     NumberPostfixIncrement,
+    // TODO: accept a ValueSource here and specialize looking for a preceding Stmt::Number
+    Assignment,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
