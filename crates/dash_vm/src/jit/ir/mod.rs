@@ -25,7 +25,6 @@ pub enum GenericStmt {
         kind: AssignKind,
         local: BackLocalId,
     },
-    Number(f64),
     Add,
     Mul,
     Lt,
@@ -58,13 +57,11 @@ pub enum GenericStmt {
     DeletePropertyStatic,
     DeletePropertyDynamic,
     String,
-    Boolean,
     Regex,
     Function,
     Null,
     Undefined,
     Undef,
-    Nan,
     Infinity,
     Global,
     This,
@@ -154,6 +151,8 @@ pub enum UncheckedNumberBinOp {
 
 #[derive(Debug)]
 pub enum Stmt {
+    Number(f64),
+    Boolean(bool),
     /// Applies a numeric binary operation without any type checks.
     UncheckedNumberBinOp {
         op: UncheckedNumberBinOp,

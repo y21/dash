@@ -255,7 +255,7 @@ fn lower_from_ip(
                 _ => unimplemented!("Intrinsic {kind:?} at {instr_ip:?} is not implemented"),
             },
             InstructionOperands::Number(NumberConstantOperands(NumberConstantWide(num))) => {
-                stmts.push(Stmt::Generic(GenericStmt::Number(num), instr_ip));
+                stmts.push(Stmt::Number(num));
             }
             InstructionOperands::StoreLocal(StoreLocalOperands {
                 kind: AssignKind::Assignment(_),
@@ -380,8 +380,8 @@ fn lower_from_ip(
             InstructionOperands::String(StringConstantOperands(SymbolConstantWide(_))) => {
                 stmts.push(Stmt::Generic(GenericStmt::String, instr_ip));
             }
-            InstructionOperands::Boolean(BooleanConstantOperands(BooleanConstantWide(_))) => {
-                stmts.push(Stmt::Generic(GenericStmt::Boolean, instr_ip));
+            InstructionOperands::Boolean(BooleanConstantOperands(BooleanConstantWide(value))) => {
+                stmts.push(Stmt::Boolean(value));
             }
             InstructionOperands::Regex(RegexConstantOperands(_)) => {
                 stmts.push(Stmt::Generic(GenericStmt::Regex, instr_ip));
@@ -399,7 +399,7 @@ fn lower_from_ip(
                 stmts.push(Stmt::Generic(GenericStmt::Undef, instr_ip));
             }
             InstructionOperands::Nan => {
-                stmts.push(Stmt::Generic(GenericStmt::Nan, instr_ip));
+                stmts.push(Stmt::Number(f64::NAN));
             }
             InstructionOperands::Infinity => {
                 stmts.push(Stmt::Generic(GenericStmt::Infinity, instr_ip));

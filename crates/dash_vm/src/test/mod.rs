@@ -760,7 +760,7 @@ jit_test!(
         let neg = -i;
         let pos = +i;
         let bitnot = ~i;
-        result = [add, sub, mul, div, rem, pow, or, xor, and, shl, shr, ushr, neg, pos, bitnot];
+        result = [add, sub, mul, div, rem, pow, or, xor, and, shl, shr, ushr, neg, pos, bitnot, NaN];
     }
     assert(result[0] === 302 && result[1] === 296);
     assert(result[2] === 598 && result[3] === 149.5);
@@ -768,6 +768,7 @@ jit_test!(
     assert(result[6] === 299 && result[7] === (299 ^ 15) && result[8] === 43);
     assert(result[9] === 12 && result[10] === 5 && result[11] === 5);
     assert(result[12] === -299 && result[13] === 299 && result[14] === -300);
+    assert(Number.isNaN(result[15]));
     "
 );
 

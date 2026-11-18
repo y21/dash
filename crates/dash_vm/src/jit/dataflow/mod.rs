@@ -162,7 +162,6 @@ fn value_metadata_from_source(state: &mut BlockState, source: ValueSource) -> Va
 fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
     match *stmt {
         Stmt::Generic(ref stmt, _) => match *stmt {
-            GenericStmt::Number(_) => state.stack.push(ValueMetadata { ty: ValueType::Number }),
             GenericStmt::StoreLocal { kind, local } => {
                 let out_ty = match kind {
                     AssignKind::Assignment => {
@@ -291,16 +290,11 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
             GenericStmt::BindThis | GenericStmt::ExportDefault | GenericStmt::ImportDyn | GenericStmt::Throw => {
                 state.stack.pop().unwrap();
             }
-            GenericStmt::Nan
-            | GenericStmt::Infinity
+            GenericStmt::Infinity
             | GenericStmt::PostfixDecLocalNum(_)
             | GenericStmt::PrefixIncLocalNum(_)
             | GenericStmt::PrefixDecLocalNum(_) => {
                 let out_ty = ValueMetadata { ty: ValueType::Number };
-                state.stack.push(out_ty);
-            }
-            GenericStmt::Boolean => {
-                let out_ty = ValueMetadata { ty: ValueType::Boolean };
                 state.stack.push(out_ty);
             }
             GenericStmt::Null
@@ -420,6 +414,8 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
                 state.stack.push(out_ty);
             }
         },
+        Stmt::Number(_) => state.stack.push(ValueMetadata { ty: ValueType::Number }),
+        Stmt::Boolean(_) => state.stack.push(ValueMetadata { ty: ValueType::Boolean }),
         Stmt::UncheckedNumberBinOp { op, lhs, rhs } => {
             let lhs = value_metadata_from_source(state, lhs);
             let rhs = value_metadata_from_source(state, rhs);

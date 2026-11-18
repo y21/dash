@@ -196,6 +196,33 @@ impl<'a> CodegenCx<'a> {
         self.codegen_f64_rip_offset(value, patch_site);
     }
 
+    fn codegen_push_value(&mut self, raw: u64) {
+        let value = self.caller_gpr64();
+        let stack_base = self.caller_gpr64();
+        let stack_len = self.caller_gpr64();
+
+        let patch_site = mov_reg_mem_disp(&mut self.buf, value, Register::Rip, 0);
+        self.codegen_u64_rip_offset(raw, patch_site);
+
+        self.codegen_ld_stack_base(stack_base);
+        self.codegen_ld_stack_len(stack_len);
+
+        mov_mem_reg_scaled(
+            &mut self.buf,
+            value,
+            stack_base,
+            stack_len,
+            Scale::target_pointer_with(),
+            0,
+        );
+
+        self.apply_length_change(LengthChange::Inc, self.stack_len_offset());
+
+        self.add_caller_reg(value);
+        self.add_caller_reg(stack_base);
+        self.add_caller_reg(stack_len);
+    }
+
     fn apply_length_change(&mut self, len_change: LengthChange, stack_len_offset: i32) {
         match len_change {
             LengthChange::Dec => {
@@ -293,7 +320,6 @@ impl<'a> CodegenCx<'a> {
                     | GenericStmt::BitShlNumLR
                     | GenericStmt::BitShrNumLR
                     | GenericStmt::BitUshrNumLR => self.codegen_handler_stub(Instruction::IntrinsicOp, ip),
-                    GenericStmt::Number(_) => self.codegen_handler_stub(Instruction::Number, ip),
                     GenericStmt::Lt => self.codegen_handler_stub(Instruction::Lt, ip),
                     GenericStmt::Add => self.codegen_handler_stub(Instruction::Add, ip),
                     GenericStmt::Mul => self.codegen_handler_stub(Instruction::Mul, ip),
@@ -330,13 +356,11 @@ impl<'a> CodegenCx<'a> {
                         self.codegen_handler_stub(Instruction::DeletePropertyDynamic, ip)
                     }
                     GenericStmt::String => self.codegen_handler_stub(Instruction::String, ip),
-                    GenericStmt::Boolean => self.codegen_handler_stub(Instruction::Boolean, ip),
                     GenericStmt::Regex => self.codegen_handler_stub(Instruction::Regex, ip),
                     GenericStmt::Function => self.codegen_handler_stub(Instruction::Function, ip),
                     GenericStmt::Null => self.codegen_handler_stub(Instruction::Null, ip),
                     GenericStmt::Undefined => self.codegen_handler_stub(Instruction::Undefined, ip),
                     GenericStmt::Undef => self.codegen_handler_stub(Instruction::Undef, ip),
-                    GenericStmt::Nan => self.codegen_handler_stub(Instruction::Nan, ip),
                     GenericStmt::Infinity => self.codegen_handler_stub(Instruction::Infinity, ip),
                     GenericStmt::Global => self.codegen_handler_stub(Instruction::Global, ip),
                     GenericStmt::This => self.codegen_handler_stub(Instruction::This, ip),
@@ -362,6 +386,8 @@ impl<'a> CodegenCx<'a> {
                         self.codegen_handler_stub(Instruction::DynamicPropAssign, ip)
                     }
                 },
+                Stmt::Number(num) => self.codegen_push_value(Value::number(num).raw()),
+                Stmt::Boolean(value) => self.codegen_push_value(Value::boolean(value).raw()),
                 Stmt::UncheckedNumberBinOp { op, lhs, rhs } => {
                     let OpStackLayout {
                         lhs,
