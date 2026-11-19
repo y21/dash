@@ -1,11 +1,13 @@
 use std::rc::Rc;
 
+use dash_ast_passes::consteval::ConstFunctionEvalCtx;
+use dash_ast_passes::type_infer::{InferMode, LocalDeclToSlot, NameResolutionResults, TypeInferCtx};
 use dash_log::{Level, debug, span};
 use dash_middle::compiler::constant::{Buffer, ConstantPool, Function, NumberConstant, SymbolConstant};
 use dash_middle::compiler::external::{External, ExternalId, PossiblyExternalId};
 use dash_middle::compiler::instruction::{AssignKind, Instruction, IntrinsicOperation};
 use dash_middle::compiler::scope::{BackLocalId, CompileValueType, LimitExceededError, Local, ScopeGraph};
-use dash_middle::compiler::{CompileResult, DebugSymbols, FunctionCallKind, StaticImportKind};
+use dash_middle::compiler::{CompileResult, DebugSymbols, FunctionCallKind, OptLevel, StaticImportKind};
 use dash_middle::indexvec::IndexVec;
 use dash_middle::interner::{StringInterner, Symbol, sym};
 use dash_middle::lexer::token::TokenType;
@@ -24,9 +26,6 @@ use dash_middle::parser::statement::{
 use dash_middle::sourcemap::Span;
 use dash_middle::util::Counter;
 use dash_middle::visitor::Visitor;
-use dash_middle::compiler::OptLevel;
-use dash_ast_passes::consteval::ConstFunctionEvalCtx;
-use dash_ast_passes::type_infer::{InferMode, LocalDeclToSlot, NameResolutionResults, TypeInferCtx};
 use for_each::{ForEachDesugarCtxt, ForEachLoopKind};
 use instruction::compile_local_load;
 use jump_container::JumpContainer;
@@ -2197,7 +2196,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
         Ok(())
     }
 
-    fn visit_class_expr(&mut self, span: Span, class: Class) -> Result<(), Error> {
+    fn visit_class_expr(&mut self, span: Span, mut class: Class) -> Result<(), Error> {
         let mut ib = InstructionBuilder::new(self);
 
         let load_super_class = match class.extends.as_deref() {
@@ -2223,7 +2222,7 @@ impl Visitor<Result<(), Error>> for FunctionCompiler<'_> {
             }
             None => None,
         };
-        let constructor = class.constructor();
+        let constructor = class.take_constructor();
 
         let binding_id = match class.name {
             Some(name) => ib.find_local_from_binding(name),

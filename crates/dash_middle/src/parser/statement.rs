@@ -830,9 +830,20 @@ impl fmt::Display for Class {
 }
 
 impl Class {
-    /// Returns the constructor, if present
-    pub fn constructor(&self) -> Option<FunctionDeclaration> {
-        self.members.iter().find_map(|cm| cm.as_constructor()).cloned()
+    /// Returns and removes the constructor, if present
+    pub fn take_constructor(&mut self) -> Option<FunctionDeclaration> {
+        self.members
+            .iter()
+            .position(|cm| cm.as_constructor().is_some())
+            .map(|idx| {
+                let member = self.members.remove(idx);
+
+                if let ClassMemberValue::Method(m) = member.value {
+                    m
+                } else {
+                    unreachable!()
+                }
+            })
     }
 }
 
