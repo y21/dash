@@ -619,8 +619,8 @@ fn lower_from_ip(
                 break;
             }
             _ => {
-                let instr = Instruction::from_repr(bytecode[ip]).unwrap();
-                return Err(CompileError::UnimplementedInstruction(instr, ip));
+                let instr = Instruction::from_repr(bytecode[instr_ip]).unwrap();
+                return Err(CompileError::UnimplementedInstruction(instr, instr_ip));
             }
         }
     }

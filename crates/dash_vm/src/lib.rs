@@ -1640,6 +1640,14 @@ impl Vm {
     pub(crate) fn impure_builtins(&mut self) {
         self.builtins_pure = false;
     }
+
+    /// Helper function for returning an iterator over the function names formatted as strings in the current call stack.
+    pub fn function_name_iter<'a>(&'a self) -> impl DoubleEndedIterator<Item = &'a str> {
+        self.frames.function_name_iter().map(move |name| {
+            name.map(move |name| self.interner.resolve(name))
+                .unwrap_or("<anonymous>")
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

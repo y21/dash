@@ -1145,7 +1145,10 @@ mod handlers {
                         let func = match jit::compile_loop_region(&mut cx.scope, start_ip, end_ip) {
                             Ok(func) => func,
                             Err(err) => {
-                                dash_log::warn!("failed to jit compile region {start_ip:?}..={end_ip:?}: {err}");
+                                let fn_name = cx.function_name_iter().next_back().unwrap();
+                                dash_log::warn!(
+                                    "failed to jit compile region {start_ip:?}..={end_ip:?}@{fn_name}: {err}"
+                                );
                                 cx.frames.set_byte(hotness_byte_ip, hotness.disable().raw());
                                 break 'jit;
                             }
@@ -1157,7 +1160,10 @@ mod handlers {
                                 return Ok(None);
                             }
                             jit::JitReturn::PreludeTypeMismatchBailout { ip } => {
-                                dash_log::warn!("jit region {start_ip:?}..={end_ip:?} had type mismatch bailout");
+                                let fn_name = cx.function_name_iter().next_back().unwrap();
+                                dash_log::warn!(
+                                    "jit region {start_ip:?}..={end_ip:?}@{fn_name} had type mismatch bailout"
+                                );
                                 cx.frames.set_ip(ip);
                                 cx.frames.set_byte(hotness_byte_ip, hotness.disable().raw());
                                 return Ok(None);
