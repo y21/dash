@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795270179350,
+  "lastUpdate": 1795294072783,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -14741,6 +14741,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 19353409,
             "range": "± 63024",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": false,
+          "id": "7b7606ad89924f2149ce0ea433cecd63326b8ee4",
+          "message": "remove stale Display impls on ast tys in favor of dash_ast_pretty\n\ncloses #85",
+          "timestamp": "2026-11-21T21:30:32+01:00",
+          "tree_id": "49ba185ac12a8dc09cee6494c17c0b1de419af06",
+          "url": "https://github.com/y21/dash/commit/7b7606ad89924f2149ce0ea433cecd63326b8ee4"
+        },
+        "date": 1795294071852,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 845598,
+            "range": "± 8361",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 94790,
+            "range": "± 1081",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 46661,
+            "range": "± 559",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1255952,
+            "range": "± 14830",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 15594716,
+            "range": "± 171857",
             "unit": "ns/iter"
           }
         ]
