@@ -12,7 +12,7 @@ members = [
     "crates/dash_proc_macro",
     "crates/dash_rt",
     "crates/dash_dlloader",
-    "crates/dash_decompiler",
+    "crates/dash_bytecode_pretty",
     "crates/dash_rt_modules",
     "crates/dash_rt_http",
     "crates/dash_rt_fs",

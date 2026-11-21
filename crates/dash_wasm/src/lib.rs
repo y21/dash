@@ -1,15 +1,15 @@
+use dash_ast_passes::consteval::ConstFunctionEvalCtx;
+use dash_ast_passes::type_infer::TypeInferCtx;
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::StaticImportKind;
 use dash_middle::parser::statement::{FuncId, VariableDeclarationName};
-use dash_ast_passes::consteval::ConstFunctionEvalCtx;
-use dash_ast_passes::type_infer::TypeInferCtx;
 use dash_parser::Parser;
+use dash_vm::Vm;
 use dash_vm::eval::EvalError;
 use dash_vm::frame::Frame;
 use dash_vm::params::VmParams;
-use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::Value;
-use dash_vm::Vm;
+use dash_vm::value::ops::conversions::ValueConversion;
 use std::fmt::Write;
 use wasm_bindgen::prelude::*;
 
@@ -85,7 +85,7 @@ pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
     match em {
         Emit::Bytecode => {
             let cmp = FunctionCompiler::new(o.into(), tcx).compile_ast(ast, true).unwrap();
-            dash_decompiler::decompile(&cmp.cp, &cmp.instructions).unwrap_or_else(|e| e.to_string())
+            dash_bytecode_pretty::decompile(&cmp.cp, &cmp.instructions).unwrap_or_else(|e| e.to_string())
         }
         Emit::JavaScript => {
             let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, o.into());

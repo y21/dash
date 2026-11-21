@@ -362,8 +362,8 @@ dependencies = [
  "anyhow",
  "clap",
  "dash_ast_passes",
+ "dash_bytecode_pretty",
  "dash_compiler",
- "dash_decompiler",
  "dash_lexer",
  "dash_middle",
  "dash_node_impl",
@@ -387,6 +387,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dash_bytecode_pretty"
+version = "0.1.0"
+dependencies = [
+ "dash_middle",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "dash_compiler"
 version = "0.3.0"
 dependencies = [
@@ -400,14 +408,6 @@ dependencies = [
  "strum",
  "strum_macros",
  "tracing",
-]
-
-[[package]]
-name = "dash_decompiler"
-version = "0.1.0"
-dependencies = [
- "dash_middle",
- "thiserror 2.0.12",
 ]
 
 [[package]]

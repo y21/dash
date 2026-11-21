@@ -21,7 +21,7 @@ dash_compiler = { path = "../crates/dash_compiler" }
 dash_vm = { path = "../crates/dash_vm", features = [] }
 dash_middle = { path = "../crates/dash_middle", features = ["format"] }
 dash_ast_passes = { path = "../crates/dash_ast_passes" }
-dash_decompiler = { path = "../crates/dash_decompiler" }
+dash_bytecode_pretty = { path = "../crates/dash_bytecode_pretty" }
 dash_rt_modules = { path = "../crates/dash_rt_modules", features = [
     "http",
     "fs",

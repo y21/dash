@@ -52,7 +52,7 @@ fn create_terminator(
     bytecode: BufferRef<'_>,
     cx: &mut LowerCtxt,
     scope: &LocalScope<'_>,
-    ecx: &mut NoValueExtractContext<'_, '_>,
+    ecx: &mut NoValueExtractContext<'_>,
     offset: i16,
     pop: ConditionalGotoPopPolicy,
     condition: ConditionalGotoCondition,
