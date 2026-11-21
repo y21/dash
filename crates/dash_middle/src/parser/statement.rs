@@ -1,6 +1,3 @@
-use std::fmt::{self, Write};
-
-use derive_more::Display;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -13,12 +10,11 @@ use super::expr::{Expr, ExprKind};
 use super::types::TypeSegment;
 
 /// A JavaScript statement
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone)]
 pub enum StatementKind {
     /// Expression statement
     // TODO: this could _technically_ be just ExprKind since the span is the exact same,
     // but we wouldn't really save on anything because the enum is big either way
-    #[display("{_0};")]
     Expression(Expr),
     /// Variable declaration
     Variable(VariableDeclarations),
@@ -45,13 +41,10 @@ pub enum StatementKind {
     /// A switch statement
     Switch(SwitchStatement),
     /// Continue loop statement
-    #[display("continue;")]
     Continue(Option<Symbol>),
     /// Break loop statement
-    #[display("break;")]
     Break(Option<Symbol>),
     /// Debugger statement
-    #[display("debugger;")]
     Debugger,
     /// A labelled statement:
     /// ```js
@@ -59,18 +52,15 @@ pub enum StatementKind {
     /// ```
     ///
     /// is represented as Labelled(foo, Expr(Block(Break(foo))))
-    #[display("{_0}: {_1}")]
     Labelled(Symbol, Box<Statement>),
     /// An empty statement
     ///
     /// This is impossible to occur in JavaScript code, however a statement may be folded to an empty statement
     /// if it does not have any side effects.
-    #[display(";")]
     Empty,
 }
 
-#[derive(Debug, Clone, Display)]
-#[display("{kind}")]
+#[derive(Debug, Clone)]
 pub struct Statement {
     pub kind: StatementKind,
     pub span: Span,
@@ -117,21 +107,18 @@ impl StatementKind {
 ///
 /// This is used in import/export statements, as well as variable declaration
 /// in the future. When destructuring is implemented, this enum will make more sense.
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone)]
 pub enum SpecifierKind {
     /// A raw identifier
-    #[display("{_0}")]
     Ident(Binding),
 }
 
 /// Type of import statement
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone)]
 pub enum ImportKind {
     /// import foo from "bar"
-    #[display("import {_0} from \"{_1}\"")]
     DefaultAs(SpecifierKind, Symbol),
     /// import * as foo from "bar"
-    #[display("import * as {_0} from \"{_1}\"")]
     AllAs(SpecifierKind, Symbol),
 }
 
@@ -146,24 +133,6 @@ pub enum ExportKind {
     NamedVar(VariableDeclarations),
 }
 
-impl fmt::Display for ExportKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Default(e) => write!(f, "export default {e}"),
-            Self::Named(es) => {
-                write!(f, "export {{ ")?;
-                fmt_list(f, es, ",")?;
-                write!(f, " }}")
-            }
-            Self::NamedVar(nv) => {
-                write!(f, "export {{ ")?;
-                fmt_list(f, &nv.0, ",")?;
-                write!(f, " }}")
-            }
-        }
-    }
-}
-
 impl ImportKind {
     /// Attempts to return the underlying [SpecifierKind], if present
     pub fn get_specifier(&self) -> Option<&SpecifierKind> {
@@ -175,8 +144,7 @@ impl ImportKind {
 }
 
 /// A catch statement
-#[derive(Debug, Clone, Display)]
-#[display("catch ({}) {{ {} }}", binding.map(|b| b.ident).unwrap_or(sym::empty), body)]
+#[derive(Debug, Clone)]
 pub struct Catch {
     pub body_span: Span,
     /// The body of a catch statement
@@ -208,22 +176,6 @@ pub struct TryCatch {
     pub finally: Option<Box<Statement>>,
 }
 
-impl fmt::Display for TryCatch {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "try {{ {} }} ", self.try_)?;
-
-        if let Some(catch) = &self.catch {
-            write!(f, "{catch}")?;
-        }
-
-        if let Some(finally) = &self.finally {
-            write!(f, " finally {{ {finally} }}")?;
-        }
-
-        Ok(())
-    }
-}
-
 impl TryCatch {
     /// Creates a new try catch block
     pub fn new(try_: Statement, catch: Option<Catch>, finally: Option<Statement>) -> Self {
@@ -236,12 +188,11 @@ impl TryCatch {
 }
 
 /// A return statement
-#[derive(Debug, Clone, Display)]
-#[display("return {_0}")]
+#[derive(Debug, Clone)]
 pub struct ReturnStatement(pub Expr);
 
 /// A loop statement
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone)]
 pub enum Loop {
     /// A for loop
     For(ForLoop),
@@ -273,8 +224,7 @@ impl From<DoWhileLoop> for Loop {
     }
 }
 
-#[derive(Debug, Clone, Display)]
-#[display("do {body} while ({condition})")]
+#[derive(Debug, Clone)]
 pub struct DoWhileLoop {
     pub body: Box<Statement>,
     pub condition: Expr,
@@ -291,8 +241,7 @@ impl DoWhileLoop {
 }
 
 /// A for..of loop
-#[derive(Debug, Clone, Display)]
-#[display("for ({binding} of {expr}) {{ {body} }}")]
+#[derive(Debug, Clone)]
 pub struct ForOfLoop {
     /// The binding of this loop
     pub binding: VariableBinding,
@@ -317,30 +266,6 @@ pub struct ForLoop {
     pub scope: ScopeId,
 }
 
-impl fmt::Display for ForLoop {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "for(")?;
-
-        if let Some(init) = &self.init {
-            write!(f, "{init}")?;
-        }
-
-        write!(f, ";")?;
-
-        if let Some(condition) = &self.condition {
-            write!(f, "{condition}")?;
-        }
-
-        write!(f, ";")?;
-
-        if let Some(finalizer) = &self.finalizer {
-            write!(f, "{finalizer}")?;
-        }
-
-        write!(f, ") {{ {} }}", self.body)
-    }
-}
-
 impl ForLoop {
     /// Creates a new for loop
     pub fn new(
@@ -361,8 +286,7 @@ impl ForLoop {
 }
 
 /// A for..in loop
-#[derive(Debug, Clone, Display)]
-#[display("for ({binding} in {expr}) {{ {body} }}")]
+#[derive(Debug, Clone)]
 pub struct ForInLoop {
     /// The binding of this loop
     pub binding: VariableBinding,
@@ -374,8 +298,7 @@ pub struct ForInLoop {
 }
 
 /// A while loop
-#[derive(Debug, Clone, Display)]
-#[display("while ({condition}) {{ {body} }}")]
+#[derive(Debug, Clone)]
 pub struct WhileLoop {
     /// The condition of this while loop, used to determine when to stop iterating
     pub condition: Expr,
@@ -405,8 +328,7 @@ pub enum FunctionKind {
     Arrow,
 }
 
-#[derive(Debug, Clone, Copy, Display, PartialEq)]
-#[display("{ident}")]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Binding {
     pub ident: Symbol,
     pub id: FrontLocalId,
@@ -480,73 +402,9 @@ pub struct FunctionDeclaration {
     pub ty_segment: Option<TypeSegment>,
 }
 
-impl fmt::Display for FunctionDeclaration {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // TODO: ty
-
-        write!(f, "function")?;
-
-        if let Some(name) = self.name {
-            write!(f, " {name}")?;
-        }
-
-        write!(f, "(")?;
-
-        for (id, (param, default, ty)) in self.parameters.iter().enumerate() {
-            if id > 0 {
-                write!(f, ",")?;
-            }
-
-            write!(f, "{param}")?;
-
-            if let Some(ty) = ty {
-                write!(f, ": {ty}")?;
-            }
-
-            if let Some(default) = default {
-                write!(f, " = {default}")?;
-            }
-        }
-
-        writeln!(f, ") {{")?;
-
-        fmt_list(f, &self.statements, "\n")?;
-
-        write!(f, "\n}}")?;
-
-        Ok(())
-    }
-}
-
-pub fn fmt_list<D>(f: &mut fmt::Formatter<'_>, it: &[D], delim: &str) -> fmt::Result
-where
-    D: fmt::Display,
-{
-    for (i, expr) in it.iter().enumerate() {
-        if i > 0 {
-            write!(f, "{delim} ")?;
-        }
-        write!(f, "{expr}")?;
-    }
-
-    Ok(())
-}
-
 /// A block statement, primarily used to enter a new scope
 #[derive(Debug, Clone)]
 pub struct BlockStatement(pub Vec<Statement>, pub ScopeId);
-
-impl fmt::Display for BlockStatement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{{")?;
-
-        fmt_list(f, &self.0, "\n")?;
-
-        write!(f, "\n}}")?;
-
-        Ok(())
-    }
-}
 
 /// An if statement
 #[derive(Debug, Clone)]
@@ -559,22 +417,6 @@ pub struct IfStatement {
     pub branches: Vec<IfStatement>,
     /// Last else branch that executes if no other branch matches, if present
     pub el: Option<Box<Statement>>,
-}
-
-impl fmt::Display for IfStatement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "if ({}) {{ {} }} ", self.condition, self.then)?;
-
-        for IfStatement { condition, then, .. } in &self.branches {
-            write!(f, " else if ({condition}) {{ {then} }} ")?;
-        }
-
-        if let Some(el) = &self.el {
-            write!(f, " else {{ {el} }}")?;
-        }
-
-        Ok(())
-    }
 }
 
 impl IfStatement {
@@ -596,28 +438,6 @@ pub struct SwitchStatement {
     pub default: Option<Vec<Statement>>,
 }
 
-impl fmt::Display for SwitchStatement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "switch ({}) {{", self.expr)?;
-
-        for case in self.cases.iter() {
-            writeln!(f, "case {}:", case.value)?;
-
-            fmt_list(f, &case.body, "\n")?;
-
-            writeln!(f)?;
-        }
-
-        if let Some(default) = &self.default {
-            writeln!(f, "default:")?;
-            fmt_list(f, default, "\n")?;
-            writeln!(f)?;
-        }
-
-        write!(f, "}}")
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct SwitchCase {
     pub value: Expr,
@@ -625,29 +445,24 @@ pub struct SwitchCase {
 }
 
 /// The type of a variable declaration
-#[derive(Debug, Clone, Copy, Display, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum VariableDeclarationKind {
     /// Var: lifetime extends to function scope
-    #[display("var")]
     Var,
 
     /// Let: lifetime limited to block scope
-    #[display("let")]
     Let,
 
     /// Const: lifetime limited to block scope and no reassigns allowed
-    #[display("const")]
     Const,
 
     /// Unnameable variables cannot be referred to by JavaScript code directly and are created by the compiler
     ///
     /// Multiple unnamed variables of the same name can exist in a function's `locals` vec and all `find` operations
     /// on the `ScopeGraph` will never consider unnamed variables.
-    #[display("__intrinsic_var")]
     Unnameable,
 
     /// Implicit "arguments" object
-    #[display("arguments")]
     Arguments,
 }
 
@@ -672,66 +487,11 @@ pub enum Pattern {
     },
 }
 
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone)]
 pub enum VariableDeclarationName {
     /// Normal identifier
     Identifier(Binding),
     Pattern(Pattern),
-}
-
-impl fmt::Display for Pattern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Pattern::Object { fields, rest } => {
-                write!(f, "{{ ")?;
-
-                for (i, (_, name, alias, default)) in fields.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-
-                    write!(f, "{name}")?;
-                    if let Some(alias) = alias {
-                        write!(f, ": {alias}")?;
-                    }
-                    if let Some(default) = default {
-                        write!(f, " = {default}")?;
-                    }
-                }
-
-                if let Some(rest) = rest {
-                    write!(f, ", ...{rest}")?;
-                }
-
-                write!(f, " }}")
-            }
-            Pattern::Array { fields, rest } => {
-                write!(f, "[ ")?;
-
-                for (i, name) in fields.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-
-                    match name {
-                        Some((name, default)) => {
-                            write!(f, "{name}")?;
-                            if let Some(default) = default {
-                                write!(f, " = {default}")?;
-                            }
-                        }
-                        None => f.write_char(',')?,
-                    }
-                }
-
-                if let Some(rest) = rest {
-                    write!(f, ", ...{rest}")?;
-                }
-
-                write!(f, " ]")
-            }
-        }
-    }
 }
 
 impl VariableDeclarationKind {
@@ -752,8 +512,7 @@ impl From<TokenType> for VariableDeclarationKind {
 }
 
 /// A variable binding
-#[derive(Debug, Clone, Display)]
-#[display("{kind} {name}")]
+#[derive(Debug, Clone)]
 pub struct VariableBinding {
     /// The name/identifier of this variable
     pub name: VariableDeclarationName,
@@ -766,12 +525,6 @@ pub struct VariableBinding {
 #[derive(Debug, Clone)]
 pub struct VariableDeclarations(pub Vec<VariableDeclaration>);
 
-impl fmt::Display for VariableDeclarations {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_list(f, &self.0, ", ")
-    }
-}
-
 /// A variable declaration
 #[derive(Debug, Clone)]
 pub struct VariableDeclaration {
@@ -779,18 +532,6 @@ pub struct VariableDeclaration {
     pub binding: VariableBinding,
     /// The value of this variable, if it was initialized
     pub value: Option<Expr>,
-}
-
-impl fmt::Display for VariableDeclaration {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.binding)?;
-
-        if let Some(value) = &self.value {
-            write!(f, " = {value}")?;
-        }
-
-        write!(f, ";")
-    }
 }
 
 impl VariableDeclaration {
@@ -811,22 +552,6 @@ pub struct Class {
     pub extends: Option<Box<Expr>>,
     /// Members of this class
     pub members: Vec<ClassMember>,
-}
-
-impl fmt::Display for Class {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "class {}", self.name.map(|b| b.ident).unwrap_or(sym::empty))?;
-
-        if let Some(extends) = &self.extends {
-            write!(f, " extends {extends}")?;
-        }
-
-        writeln!(f, " {{")?;
-
-        fmt_list(f, &self.members, ";")?;
-
-        write!(f, "}}")
-    }
 }
 
 impl Class {
@@ -867,31 +592,6 @@ pub struct ClassMember {
     pub value: ClassMemberValue,
 }
 
-impl fmt::Display for ClassMember {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.static_ {
-            write!(f, "static ")?;
-        }
-
-        if self.private {
-            write!(f, "private ")?;
-        }
-
-        match &self.key {
-            ClassMemberKey::Computed(c) => write!(f, "[{c}]")?,
-            ClassMemberKey::Named(n, _) => write!(f, "{n}")?,
-        }
-
-        match &self.value {
-            ClassMemberValue::Method(method) => write!(f, "{method}"),
-            ClassMemberValue::Field(Some(field)) => write!(f, "= {field};"),
-            ClassMemberValue::Field(None) => f.write_char(';'),
-            ClassMemberValue::Getter(method) => write!(f, "get {method}"),
-            ClassMemberValue::Setter(method) => write!(f, "set {method}"),
-        }
-    }
-}
-
 impl ClassMember {
     /// Returns the inner function if this member is the constructor
     pub fn as_constructor(&self) -> Option<&FunctionDeclaration> {
@@ -919,12 +619,10 @@ pub enum ClassMemberValue {
     Setter(FunctionDeclaration),
 }
 /// A function parameter
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone)]
 pub enum Parameter {
     Identifier(Binding),
     SpreadIdentifier(Binding),
-    #[display("{_1}")]
     Pattern(FrontLocalId, Pattern),
-    #[display("{_1}")]
     SpreadPattern(FrontLocalId, Pattern),
 }

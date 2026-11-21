@@ -1,13 +1,9 @@
-use std::fmt::{self, Debug};
-
-use derive_more::Display;
-
 use crate::compiler::scope::BackLocalId;
 use crate::interner::{Symbol, sym};
 use crate::lexer::token::TokenType;
 use crate::sourcemap::Span;
 
-use super::statement::{Class, FunctionDeclaration, fmt_list};
+use super::statement::{Class, FunctionDeclaration};
 
 /// The sequence operator (`expr, expr`)
 pub type Seq = (Box<Expr>, Box<Expr>);
@@ -17,7 +13,7 @@ pub type Prefix = (TokenType, Box<Expr>);
 pub type Postfix = (TokenType, Box<Expr>);
 
 /// A parsed expression
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone)]
 pub enum ExprKind {
     /// Represents a binary expression
     Binary(BinaryExpr),
@@ -27,7 +23,6 @@ pub enum ExprKind {
     Literal(LiteralExpr),
     /// Represents an unary expression, i.e. `-foo`, `+bar`, `await foo`
     Unary(UnaryExpr),
-    #[display("yield* {_0}")]
     YieldStar(Box<Expr>),
     /// An assignment expression, i.e. `foo = bar`
     Assignment(AssignmentExpr),
@@ -40,13 +35,10 @@ pub enum ExprKind {
     /// A property access expression, i.e. `foo.bar`
     PropertyAccess(PropertyAccessExpr),
     /// A sequence expression, i.e. `foo, bar`
-    #[display("{}, {}", _0.0, _0.1)]
     Sequence(Seq),
     /// Any prefix expression, i.e. `++foo`
-    #[display("{}{}", _0.0, _0.1)]
     Prefix(Prefix),
     /// Any postfix expression, i.e. `foo++`
-    #[display("{}{}", _0.1, _0.0)]
     Postfix(Postfix),
     /// An expression that evaluates to a function object
     ///
@@ -61,7 +53,6 @@ pub enum ExprKind {
     /// An optional chaining expression
     Chaining(OptionalChainingExpression),
     /// Compiled bytecode
-    #[display("<compiled>")]
     Compiled(Vec<u8>),
     /// A dynamic import expression, i.e. `import(specifier, options)`
     Import(DynamicImport),
@@ -75,37 +66,10 @@ pub struct DynamicImport {
     pub options: Option<Box<Expr>>,
 }
 
-impl fmt::Display for DynamicImport {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "import({}", self.specifier)?;
-        if let Some(options) = &self.options {
-            write!(f, ", {}", options)?;
-        }
-        write!(f, ")")
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct OptionalChainingExpression {
     pub base: Box<Expr>,
     pub components: Vec<OptionalChainingComponent>,
-}
-
-impl fmt::Display for OptionalChainingExpression {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&*self.base, f)?;
-        f.write_str("?")?;
-        for component in &self.components {
-            match component {
-                OptionalChainingComponent::Ident { property, .. } => write!(f, ".{property}")?,
-                OptionalChainingComponent::Dyn { property, .. } => write!(f, "[{property}]")?,
-                OptionalChainingComponent::Call(args) | OptionalChainingComponent::Construct(args) => {
-                    fmt_list(f, args, ", ")?
-                }
-            }
-        }
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -120,8 +84,7 @@ pub enum OptionalChainingComponent {
     Construct(Vec<CallArgumentKind>),
 }
 
-#[derive(Debug, Clone, Display)]
-#[display("{kind}")]
+#[derive(Debug, Clone)]
 pub struct Expr {
     pub kind: ExprKind,
     pub span: Span,
@@ -318,32 +281,11 @@ pub enum ArrayMemberKind {
     Empty,
 }
 
-impl fmt::Display for ArrayMemberKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ArrayMemberKind::Item(item) => fmt::Display::fmt(item, f),
-            ArrayMemberKind::Spread(item) => {
-                f.write_str("...")?;
-                fmt::Display::fmt(item, f)
-            }
-            ArrayMemberKind::Empty => f.write_str("<empty>"),
-        }
-    }
-}
-
 /// An array literal expression (`[expr, expr]`)
 #[derive(Debug, Clone)]
 pub struct ArrayLiteral {
     pub members: Vec<ArrayMemberKind>,
     pub parenthesized: bool,
-}
-
-impl fmt::Display for ArrayLiteral {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[")?;
-        fmt_list(f, &self.members, ",")?;
-        write!(f, "]")
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -360,42 +302,11 @@ pub enum ObjectMemberKind {
     Default(Symbol),
 }
 
-impl fmt::Display for ObjectMemberKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Getter(name) => write!(f, "get {name}"),
-            Self::DynamicGetter(expr) => write!(f, "get [{expr}]"),
-            Self::Setter(name) => write!(f, "set [{name}]"),
-            Self::DynamicSetter(expr) => write!(f, "set [{expr}]"),
-            Self::Static(name) => write!(f, "{name}"),
-            Self::Default(name) => write!(f, "{name}"),
-            Self::Dynamic(expr) => write!(f, "[{expr}]"),
-            Self::Spread => f.write_str("...<expression unavailable>"), // TODO: figure out a way to display it here
-        }
-    }
-}
-
 /// An object literal expression (`{ k: "v" }`)
 #[derive(Debug, Clone)]
 pub struct ObjectLiteral {
     pub members: Vec<(ObjectMemberKind, Expr)>,
     pub parenthesized: bool,
-}
-
-impl fmt::Display for ObjectLiteral {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{")?;
-
-        for (i, (k, v)) in self.members.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{k}: ")?;
-            write!(f, "{v}")?;
-        }
-
-        write!(f, "}}")
-    }
 }
 
 /// A property access expression
@@ -409,23 +320,8 @@ pub struct PropertyAccessExpr {
     pub property: Box<Expr>,
 }
 
-impl fmt::Display for PropertyAccessExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.target)?;
-
-        if self.computed {
-            write!(f, "[{}]", self.property)?;
-        } else {
-            write!(f, ".{}", self.property)?;
-        }
-
-        Ok(())
-    }
-}
-
 /// A conditional expression
-#[derive(Debug, Clone, Display)]
-#[display("{condition} ? {then} : {el}")]
+#[derive(Debug, Clone)]
 pub struct ConditionalExpr {
     /// The first part of a conditional expression, the condition
     pub condition: Box<Expr>,
@@ -443,18 +339,6 @@ pub enum CallArgumentKind {
     Spread(Expr),
 }
 
-impl fmt::Display for CallArgumentKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CallArgumentKind::Normal(expr) => fmt::Display::fmt(expr, f),
-            CallArgumentKind::Spread(expr) => {
-                f.write_str("...")?;
-                fmt::Display::fmt(expr, f)
-            }
-        }
-    }
-}
-
 /// A function call expression
 #[derive(Debug, Clone)]
 pub struct FunctionCall {
@@ -466,16 +350,8 @@ pub struct FunctionCall {
     pub arguments: Vec<CallArgumentKind>,
 }
 
-impl fmt::Display for FunctionCall {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}(", self.target)?;
-        fmt_list(f, &self.arguments, ",")?;
-        write!(f, ")")
-    }
-}
-
 /// The target of an assignment
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone)]
 pub enum AssignmentTarget {
     /// Assignment to an expression-place
     Expr(Box<Expr>),
@@ -493,8 +369,7 @@ impl AssignmentTarget {
 }
 
 /// An assignment expression
-#[derive(Debug, Clone, Display)]
-#[display("{left} {operator} {right}")]
+#[derive(Debug, Clone)]
 pub struct AssignmentExpr {
     /// The lefthand side (place-expression)
     pub left: AssignmentTarget,
@@ -532,8 +407,7 @@ impl AssignmentExpr {
 }
 
 /// Any binary expression
-#[derive(Debug, Clone, Display)]
-#[display("{left} {operator} {right}")]
+#[derive(Debug, Clone)]
 pub struct BinaryExpr {
     /// Lefthand side
     pub left: Box<Expr>,
@@ -558,16 +432,8 @@ impl BinaryExpr {
 #[derive(Debug, Clone)]
 pub struct GroupingExpr(pub Vec<Expr>);
 
-impl fmt::Display for GroupingExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(")?;
-        fmt_list(f, &self.0, ",")?;
-        write!(f, ")")
-    }
-}
-
 /// A literal expression
-#[derive(Debug, Clone, Display)]
+#[derive(Debug, Clone)]
 pub enum LiteralExpr {
     /// Boolean literal
     Boolean(bool),
@@ -577,16 +443,12 @@ pub enum LiteralExpr {
     /// Number literal
     Number(f64),
     /// String literal, borrowed from input string
-    #[display("\"{_0}\"")]
     String(Symbol),
 
-    #[display("/{_1}/")]
     Regex(dash_regex::Regex, Symbol),
 
-    #[display("null")]
     Null,
 
-    #[display("this")]
     This,
 }
 
@@ -608,8 +470,7 @@ impl LiteralExpr {
 }
 
 /// Unary expression
-#[derive(Debug, Clone, Display)]
-#[display("{operator}{expr}")]
+#[derive(Debug, Clone)]
 pub struct UnaryExpr {
     /// The operator that was used
     pub operator: TokenType,

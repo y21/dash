@@ -1,7 +1,9 @@
 use dash_ast_passes::consteval::ConstFunctionEvalCtx;
 use dash_ast_passes::type_infer::TypeInferCtx;
+use dash_ast_pretty::{PrettyCx, pretty_stmts_into};
 use dash_compiler::FunctionCompiler;
 use dash_middle::compiler::StaticImportKind;
+use dash_middle::interner::StringInterner;
 use dash_middle::parser::statement::{FuncId, VariableDeclarationName};
 use dash_parser::Parser;
 use dash_vm::Vm;
@@ -78,7 +80,8 @@ pub fn fmt_value(value: Value, vm: &mut Vm) -> String {
 
 #[wasm_bindgen]
 pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
-    let parser = Parser::new_from_str(s).unwrap();
+    let mut interner = StringInterner::new();
+    let parser = Parser::new_from_str(&mut interner, s).unwrap();
     let (mut ast, counter) = parser.parse_all().unwrap();
     let mut tcx = TypeInferCtx::new(counter);
 
@@ -91,9 +94,12 @@ pub fn debug(s: &str, o: OptLevel, em: Emit) -> String {
             let mut cfx = ConstFunctionEvalCtx::new(&mut tcx, o.into());
             cfx.visit_many_statements(&mut ast, FuncId::ROOT);
             let mut output = String::new();
-            for node in ast {
-                let _ = writeln!(output, "{node}");
-            }
+            let mut cx = PrettyCx {
+                out: &mut output,
+                interner: &interner,
+                depth: 0,
+            };
+            pretty_stmts_into(&mut cx, &ast);
             output
         }
         Emit::Ast => {
@@ -141,7 +147,7 @@ pub fn infer(s: &str) -> Result<JsValue, String> {
     for local in tcx.scope_mut(FuncId::ROOT).locals() {
         if let VariableDeclarationName::Identifier(ident) = local.binding().name {
             let ty = local.inferred_type().borrow();
-            let _ = writeln!(out, "{ident}: {ty:?} ");
+            let _ = writeln!(out, "{}: {ty:?} ", ident.ident);
         }
     }
 

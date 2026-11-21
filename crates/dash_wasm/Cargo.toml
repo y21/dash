@@ -12,6 +12,7 @@ crate-type = ["cdylib", "rlib"]
 wasm-bindgen = "0.2.63"
 dash_vm = { path = "../dash_vm", features = [] }
 dash_ast_passes = { path = "../dash_ast_passes" }
+dash_ast_pretty = { path = "../dash_ast_pretty" }
 dash_compiler = { path = "../dash_compiler", features = [
     "from_string",
     "decompile",

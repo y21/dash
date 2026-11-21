@@ -654,7 +654,7 @@ impl<'s> TypeInferCtx<'s> {
         }: &FunctionDeclaration,
     ) -> Option<CompileValueType> {
         if let Some(name) = *name {
-            debug!("visit function {name}");
+            debug!("visit function {}", name.ident);
 
             self.add_local(name, VariableDeclarationKind::Var, None);
         }
