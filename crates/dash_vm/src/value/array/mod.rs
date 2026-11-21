@@ -290,10 +290,24 @@ impl Object for Array {
         self.obj.get_prototype(sc)
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>, _: OwnKeysMode) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
         let items = self.items.borrow();
-        // TODO: this should not include holey indices
-        Ok(array_like_keys(sc, items.len() as usize).collect())
+
+        let keys = match *items {
+            ArrayInner::Dense(ref values) => array_like_keys(sc, values.len(), mode.include_non_enumerable()).collect(),
+            ArrayInner::Table(ref table) => {
+                let mut keys: Vec<_> = table.unordered_keys().collect();
+
+                keys.sort_unstable();
+
+                keys.into_iter()
+                    .map(|key| sc.interner.intern_usize(key as usize))
+                    .chain(mode.include_non_enumerable().then_some(sym::length))
+                    .map(|name| Value::string(name.into()))
+                    .collect()
+            }
+        };
+        Ok(keys)
     }
 
     extract!(self);

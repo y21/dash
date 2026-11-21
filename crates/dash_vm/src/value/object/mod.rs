@@ -41,6 +41,15 @@ pub enum OwnKeysMode {
     AllSymbols,
 }
 
+impl OwnKeysMode {
+    pub fn include_non_enumerable(self) -> bool {
+        match self {
+            OwnKeysMode::OnlyEnumerable => false,
+            OwnKeysMode::All | OwnKeysMode::AllStrings | OwnKeysMode::AllSymbols => true,
+        }
+    }
+}
+
 pub trait Object: Debug + Trace {
     fn get_own_property(&self, this: This, key: PropertyKey, sc: &mut LocalScope<'_>) -> Result<Unrooted, Unrooted> {
         delegate_get_own_property(self, this, sc, key)

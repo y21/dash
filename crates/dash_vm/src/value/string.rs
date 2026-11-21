@@ -127,9 +127,9 @@ impl Object for JsString {
         throw!(scope, TypeError, "'{}' is not a function", v)
     }
 
-    fn own_keys(&self, sc: &mut LocalScope<'_>, _: OwnKeysMode) -> Result<Vec<Value>, Value> {
+    fn own_keys(&self, sc: &mut LocalScope<'_>, mode: OwnKeysMode) -> Result<Vec<Value>, Value> {
         let len = self.len(sc);
-        Ok(array_like_keys(sc, len).collect())
+        Ok(array_like_keys(sc, len, mode.include_non_enumerable()).collect())
     }
 
     fn type_of(&self, _: &Vm) -> Typeof {

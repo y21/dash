@@ -35,6 +35,10 @@ impl ArrayTable {
         array.into_iter().map(|(_, v)| v).collect()
     }
 
+    pub fn unordered_keys(&self) -> impl Iterator<Item = u32> + '_ {
+        self.map.keys().copied()
+    }
+
     pub fn with_len(len: u32) -> Self {
         Self {
             len,

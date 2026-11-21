@@ -1,5 +1,5 @@
+use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::{fmt, iter};
 
 use dash_middle::interner::{self, sym};
 use dash_proc_macro::Trace;
@@ -124,10 +124,14 @@ impl Object for bool {
     extract!(self);
 }
 
-pub fn array_like_keys<'a, 'b>(sc: &'a mut LocalScope<'b>, len: usize) -> impl Iterator<Item = Value> + use<'a, 'b> {
+pub fn array_like_keys<'a, 'b>(
+    sc: &'a mut LocalScope<'b>,
+    len: usize,
+    include_len: bool,
+) -> impl Iterator<Item = Value> + use<'a, 'b> {
     (0..len)
         .map(|i| sc.intern_usize(i))
-        .chain(iter::once_with(|| sym::length))
+        .chain(include_len.then_some(sym::length))
         .map(|x| Value::string(x.into()))
 }
 
