@@ -74,7 +74,7 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     }
 
     if dump_ir {
-        let out = dash_bytecode_pretty::pretty(&bytecode.instructions, &bytecode.cp);
+        let out = dash_bytecode_pretty::pretty(&bytecode.instructions, &bytecode.cp, interner);
         println!("{out}");
     }
 
