@@ -24,6 +24,7 @@ members = [
     "crates/dash_node_impl",
     "lints",
     "lints/tests/ui",
+    "crates/dash_ast_pretty",
     # "basically dead" crates (need substantial effort to get them up and running again, fell behind with too many internal changes):
     # (commented out so the project can be built in the root dir)
     #

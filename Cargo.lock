@@ -362,6 +362,7 @@ dependencies = [
  "anyhow",
  "clap",
  "dash_ast_passes",
+ "dash_ast_pretty",
  "dash_bytecode_pretty",
  "dash_compiler",
  "dash_lexer",
@@ -383,6 +384,13 @@ name = "dash_ast_passes"
 version = "0.3.0"
 dependencies = [
  "dash_log",
+ "dash_middle",
+]
+
+[[package]]
+name = "dash_ast_pretty"
+version = "0.1.0"
+dependencies = [
  "dash_middle",
 ]
 

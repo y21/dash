@@ -112,7 +112,7 @@ pub enum TokenType {
     #[display(">>")]
     RightShift,
 
-    #[display(">>=")]
+    #[display(">>>=")]
     UnsignedRightShiftAssignment,
 
     #[display(">>>")]
@@ -301,16 +301,16 @@ pub enum TokenType {
     #[display("instanceof")]
     Instanceof,
 
-    #[display("await ")]
+    #[display("await")]
     Await,
 
-    #[display("delete ")]
+    #[display("delete")]
     Delete,
 
-    #[display("void ")]
+    #[display("void")]
     Void,
 
-    #[display("typeof ")]
+    #[display("typeof")]
     Typeof,
 
     #[display("break")]

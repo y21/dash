@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use clap::ArgMatches;
 use dash_ast_passes::consteval::ConstFunctionEvalCtx;
 use dash_ast_passes::type_infer::name_res;
+use dash_ast_pretty::PrettyCx;
 use dash_compiler::transformations;
 use dash_middle::compiler::OptLevel;
 use dash_middle::interner::StringInterner;
@@ -58,9 +59,13 @@ pub fn dump(arg: &ArgMatches) -> anyhow::Result<()> {
     }
 
     if dump_js {
-        for node in &ast {
-            println!("{node}");
-        }
+        let mut cx = PrettyCx {
+            out: &mut String::new(),
+            interner,
+            depth: 0,
+        };
+        dash_ast_pretty::pretty_stmts_into(&mut cx, &ast);
+        println!("{}", cx.out);
     }
 
     let bytecode = dash_compiler::FunctionCompiler::new(&source, opt, nameres, scope_counter, interner)
