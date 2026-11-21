@@ -727,7 +727,9 @@ impl<'a> CodegenCx<'a> {
                     jmp_block(&mut self.buf, target);
                     self.codegen_block(target);
                 }
-                BranchTarget::Break => todo!(),
+                BranchTarget::Break => {
+                    jmp_synthetic_label(&mut self.buf, SyntheticLabel::Exit);
+                }
             },
             Terminator::ConditionalGoto {
                 true_,
