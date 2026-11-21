@@ -386,6 +386,19 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
                 state.stack.pop().unwrap(); // target
                 state.stack.push(out_ty);
             }
+            GenericStmt::StaticPropAccess { preserve_this } => {
+                if !preserve_this {
+                    state.stack.pop().unwrap(); // target
+                }
+                state.stack.push(ValueMetadata { ty: ValueType::Any });
+            }
+            GenericStmt::DynamicPropAccess { preserve_this } => {
+                state.stack.pop().unwrap(); // key
+                if !preserve_this {
+                    state.stack.pop().unwrap(); // target
+                }
+                state.stack.push(ValueMetadata { ty: ValueType::Any });
+            }
             GenericStmt::DynamicPropAssign { kind } => {
                 let out_ty = match kind {
                     AssignKind::Assignment => state.stack.pop().unwrap(),
@@ -412,6 +425,12 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
                 state.stack.pop().unwrap(); // key
                 state.stack.pop().unwrap(); // target
                 state.stack.push(out_ty);
+            }
+            GenericStmt::BuiltinIntrinsicCall { argc } => {
+                for _ in 0..argc {
+                    state.stack.pop().unwrap();
+                }
+                state.stack.push(ValueMetadata { ty: ValueType::Any });
             }
         },
         Stmt::Number(_) => state.stack.push(ValueMetadata { ty: ValueType::Number }),

@@ -96,6 +96,12 @@ pub enum GenericStmt {
     DynamicPropAssign {
         kind: AssignKind,
     },
+    StaticPropAccess {
+        preserve_this: bool,
+    },
+    DynamicPropAccess {
+        preserve_this: bool,
+    },
     RemNumLR,
     PowNumLR,
     BitOrNumLR,
@@ -104,6 +110,9 @@ pub enum GenericStmt {
     BitShlNumLR,
     BitShrNumLR,
     BitUshrNumLR,
+    BuiltinIntrinsicCall {
+        argc: u8,
+    },
     PostfixDecLocalNum(BackLocalId),
     PrefixIncLocalNum(BackLocalId),
     PrefixDecLocalNum(BackLocalId),

@@ -816,6 +816,7 @@ impl<S: ExtractSource> ExtractBack<S> for AssignPropertiesOperands<S> {
 #[derive(Debug)]
 pub struct StaticPropertyAccessOperands<S: ExtractSource> {
     pub ident: SymbolConstantWide,
+    pub preserve_this: bool,
     pub target: S::Value,
 }
 
@@ -830,7 +831,11 @@ impl<S: ExtractSource> ExtractBack<S> for StaticPropertyAccessOperands<S> {
         } else {
             source.pop_stack_rooted()
         };
-        Ok(Self { ident, target })
+        Ok(Self {
+            ident,
+            preserve_this,
+            target,
+        })
     }
 }
 
@@ -846,6 +851,7 @@ define_operand_struct_with_source! {
 #[derive(Debug)]
 pub struct DynamicPropertyAccessOperands<S: ExtractSource> {
     pub key: S::Value,
+    pub preserve_this: bool,
     pub target: S::Value,
 }
 
@@ -860,7 +866,11 @@ impl<S: ExtractSource> ExtractBack<S> for DynamicPropertyAccessOperands<S> {
         } else {
             source.pop_stack_rooted()
         };
-        Ok(Self { key, target })
+        Ok(Self {
+            key,
+            preserve_this,
+            target,
+        })
     }
 }
 

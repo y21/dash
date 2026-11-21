@@ -1503,6 +1503,7 @@ mod handlers {
     pub fn staticpropertyaccess(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
         let StaticPropertyAccessOperands {
             target,
+            preserve_this: _,
             ident: SymbolConstantWide(ident),
         } = extract_back_infallible(&mut cx);
 
@@ -1608,7 +1609,11 @@ mod handlers {
     }
 
     pub fn dynamicpropertyaccess(mut cx: DispatchContext<'_>) -> Result<Option<HandleResult>, Unrooted> {
-        let DynamicPropertyAccessOperands { key, target } = extract_back_infallible(&mut cx);
+        let DynamicPropertyAccessOperands {
+            key,
+            preserve_this: _,
+            target,
+        } = extract_back_infallible(&mut cx);
 
         let key = PropertyKey::from_value(&mut cx, key)?;
 

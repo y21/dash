@@ -319,7 +319,10 @@ impl<'a> CodegenCx<'a> {
                     | GenericStmt::BitAndNumLR
                     | GenericStmt::BitShlNumLR
                     | GenericStmt::BitShrNumLR
-                    | GenericStmt::BitUshrNumLR => self.codegen_handler_stub(Instruction::IntrinsicOp, ip),
+                    | GenericStmt::BitUshrNumLR
+                    | GenericStmt::BuiltinIntrinsicCall { .. } => {
+                        self.codegen_handler_stub(Instruction::IntrinsicOp, ip)
+                    }
                     GenericStmt::Lt => self.codegen_handler_stub(Instruction::Lt, ip),
                     GenericStmt::Add => self.codegen_handler_stub(Instruction::Add, ip),
                     GenericStmt::Mul => self.codegen_handler_stub(Instruction::Mul, ip),
@@ -381,6 +384,12 @@ impl<'a> CodegenCx<'a> {
                     GenericStmt::StoreLocalExt { .. } => self.codegen_handler_stub(Instruction::StoreLocalExt, ip),
                     GenericStmt::StaticPropAssign { .. } => {
                         self.codegen_handler_stub(Instruction::StaticPropAssign, ip)
+                    }
+                    GenericStmt::StaticPropAccess { .. } => {
+                        self.codegen_handler_stub(Instruction::StaticPropAccess, ip)
+                    }
+                    GenericStmt::DynamicPropAccess { .. } => {
+                        self.codegen_handler_stub(Instruction::DynamicPropAccess, ip)
                     }
                     GenericStmt::DynamicPropAssign { .. } => {
                         self.codegen_handler_stub(Instruction::DynamicPropAssign, ip)

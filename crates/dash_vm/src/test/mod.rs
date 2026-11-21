@@ -942,6 +942,10 @@ jit_test!(
         ++object['dynamicValue'];
         object['dynamicValue']--;
         --object['dynamicValue'];
+
+        let staticRead = object.staticValue;
+        let dynamicRead = object['dynamicValue'];
+        assert(staticRead === dynamicRead);
     }
     assert(object.staticValue === 3);
     assert(object.dynamicValue === 3);

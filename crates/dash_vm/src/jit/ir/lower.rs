@@ -5,15 +5,16 @@ use dash_middle::compiler::operands::{
     AddOperands, AssignKind, BinaryOperator, BindThisOperands, BitandOperands, BitnotOperands, BitorOperands,
     BitshlOperands, BitshrOperands, BitushrOperands, BitxorOperands, BooleanConstantOperands, BooleanConstantWide,
     CallOperands, CallSymbolIteratorOperands, ConditionalJumpNoPopOperands, ConditionalJumpPopOperands,
-    DeletePropertyDynamicOperands, DeletePropertyStaticOperands, DivOperands, DynamicPropertyAssignOperands,
-    EqOperands, ExportDefaultOperands, ExportNamedOperands, ForInIteratorOperands, FunctionConstantOperands,
-    GeOperands, GtOperands, ImportDynOperands, ImportStaticOperands, InstanceofOperands, InstructionOperands,
-    IntrinsicKind, IntrinsicOperands, JmpFalseNoPopOperands, JmpFalsePopOperands, JmpNullishNoPopOperands,
-    JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands, JmpTruePopOperands, JmpUndefinedNoPopOperands,
-    JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands, LdLocalOperands, LeOperands, LoopBackjumpOperands,
-    LtOperands, MulOperands, NeOperands, NegOperands, NotOperands, NumberConstantOperands, NumberConstantWide,
-    NumberInline8, NumberInline32, ObjectInOperands, OptionDiscriminatedByte, PopOperands, PosOperands, PowOperands,
-    RegexConstantOperands, RemOperands, StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalExtOperands,
+    DeletePropertyDynamicOperands, DeletePropertyStaticOperands, DivOperands, DynamicPropertyAccessOperands,
+    DynamicPropertyAssignOperands, EqOperands, ExportDefaultOperands, ExportNamedOperands, ForInIteratorOperands,
+    FunctionConstantOperands, GeOperands, GtOperands, ImportDynOperands, ImportStaticOperands, InstanceofOperands,
+    InstructionOperands, IntrinsicCallOperands, IntrinsicKind, IntrinsicOperands, JmpFalseNoPopOperands,
+    JmpFalsePopOperands, JmpNullishNoPopOperands, JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands,
+    JmpTruePopOperands, JmpUndefinedNoPopOperands, JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands,
+    LdLocalOperands, LeOperands, LoopBackjumpOperands, LtOperands, MulOperands, NeOperands, NegOperands, NotOperands,
+    NumberConstantOperands, NumberConstantWide, NumberInline8, NumberInline32, ObjectInOperands,
+    OptionDiscriminatedByte, PopOperands, PosOperands, PowOperands, RegexConstantOperands, RemOperands,
+    StaticPropertyAccessOperands, StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalExtOperands,
     StoreLocalOperands, StrictEqOperands, StrictNeOperands, StringConstantOperands, SubOperands, SymbolConstantWide,
     ThrowOperands, TypeofIdentOperands, TypeofOperands,
 };
@@ -252,7 +253,36 @@ fn lower_from_ip(
                         rhs: ValueSource::Float(num),
                     });
                 }
-                _ => unimplemented!("Intrinsic {kind:?} at {instr_ip:?} is not implemented"),
+                IntrinsicKind::Exp(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Log2(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Expm1(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Cbrt(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Clz32(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Atanh(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Atan2(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Round(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Acosh(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Abs(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Sinh(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Sin(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Ceil(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Tan(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Trunc(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Asinh(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Log10(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Asin(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Random(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Log1p(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Sqrt(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Atan(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Cos(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Tanh(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Log(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Floor(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Cosh(IntrinsicCallOperands { argc })
+                | IntrinsicKind::Acos(IntrinsicCallOperands { argc }) => {
+                    stmts.push(Stmt::Generic(GenericStmt::BuiltinIntrinsicCall { argc }, instr_ip));
+                }
             },
             InstructionOperands::Number(NumberConstantOperands(NumberConstantWide(num))) => {
                 stmts.push(Stmt::Number(num));
@@ -487,6 +517,23 @@ fn lower_from_ip(
             }) => {
                 stmts.push(Stmt::Generic(
                     GenericStmt::StaticPropAssign { kind: kind.into() },
+                    instr_ip,
+                ));
+            }
+            InstructionOperands::StaticPropAccess(StaticPropertyAccessOperands {
+                ident: _,
+                preserve_this,
+                target: (),
+            }) => {
+                stmts.push(Stmt::Generic(GenericStmt::StaticPropAccess { preserve_this }, instr_ip));
+            }
+            InstructionOperands::DynamicPropAccess(DynamicPropertyAccessOperands {
+                preserve_this,
+                key: (),
+                target: (),
+            }) => {
+                stmts.push(Stmt::Generic(
+                    GenericStmt::DynamicPropAccess { preserve_this },
                     instr_ip,
                 ));
             }
