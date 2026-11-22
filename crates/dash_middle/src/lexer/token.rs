@@ -52,18 +52,6 @@ pub enum TokenType {
     #[display("++")]
     Increment,
 
-    #[display("++")]
-    PrefixIncrement,
-
-    #[display("--")]
-    PrefixDecrement,
-
-    #[display("++")]
-    PostfixIncrement,
-
-    #[display("--")]
-    PostfixDecrement,
-
     #[display("*")]
     Star,
 
