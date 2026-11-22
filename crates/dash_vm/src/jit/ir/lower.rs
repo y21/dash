@@ -2,16 +2,17 @@ use std::collections::hash_map::Entry;
 
 use dash_middle::compiler::instruction::Instruction;
 use dash_middle::compiler::operands::{
-    AddOperands, AssignKind, BinaryOperator, BindThisOperands, BitandOperands, BitnotOperands, BitorOperands,
-    BitshlOperands, BitshrOperands, BitushrOperands, BitxorOperands, BooleanConstantOperands, BooleanConstantWide,
-    CallOperands, CallSymbolIteratorOperands, ConditionalJumpNoPopOperands, ConditionalJumpPopOperands,
-    DeletePropertyDynamicOperands, DeletePropertyStaticOperands, DivOperands, DynamicPropertyAccessOperands,
-    DynamicPropertyAssignOperands, EqOperands, ExportDefaultOperands, ExportNamedOperands, ForInIteratorOperands,
-    FunctionConstantOperands, GeOperands, GtOperands, ImportDynOperands, ImportStaticOperands, InstanceofOperands,
-    InstructionOperands, IntrinsicCallOperands, IntrinsicKind, IntrinsicOperands, JmpFalseNoPopOperands,
-    JmpFalsePopOperands, JmpNullishNoPopOperands, JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands,
-    JmpTruePopOperands, JmpUndefinedNoPopOperands, JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands,
-    LdLocalOperands, LeOperands, LoopBackjumpOperands, LtOperands, MulOperands, NeOperands, NegOperands, NotOperands,
+    AddOperands, ArrayLiteralElement, ArrayLiteralOperands, AssignKind, BinaryOperator, BindThisOperands,
+    BitandOperands, BitnotOperands, BitorOperands, BitshlOperands, BitshrOperands, BitushrOperands, BitxorOperands,
+    BooleanConstantOperands, BooleanConstantWide, CallOperands, CallSymbolIteratorOperands,
+    ConditionalJumpNoPopOperands, ConditionalJumpPopOperands, DeletePropertyDynamicOperands,
+    DeletePropertyStaticOperands, DivOperands, DynamicPropertyAccessOperands, DynamicPropertyAssignOperands,
+    EqOperands, ExportDefaultOperands, ExportNamedOperands, ForInIteratorOperands, FunctionConstantOperands,
+    GeOperands, GtOperands, ImportDynOperands, ImportStaticOperands, InstanceofOperands, InstructionOperands,
+    IntrinsicCallOperands, IntrinsicKind, IntrinsicOperands, JmpFalseNoPopOperands, JmpFalsePopOperands,
+    JmpNullishNoPopOperands, JmpNullishPopOperands, JmpOperands, JmpTrueNoPopOperands, JmpTruePopOperands,
+    JmpUndefinedNoPopOperands, JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands, LdLocalOperands,
+    LeOperands, LoopBackjumpOperands, LtOperands, MulOperands, NeOperands, NegOperands, NotOperands,
     NumberConstantOperands, NumberConstantWide, NumberInline8, NumberInline32, ObjectInOperands,
     OptionDiscriminatedByte, PopOperands, PosOperands, PowOperands, RegexConstantOperands, RemOperands, RetOperands,
     StaticPropertyAccessOperands, StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalExtOperands,
@@ -20,6 +21,7 @@ use dash_middle::compiler::operands::{
 };
 use dash_middle::compiler::scope::BackLocalId;
 use dash_middle::indexvec::IndexVec;
+use dash_middle::iterator_with::InfallibleIteratorWith;
 use rustc_hash::FxHashMap;
 
 use crate::frame::Ip;
@@ -546,6 +548,16 @@ fn lower_from_ip(
                     GenericStmt::DynamicPropAssign { kind: kind.into() },
                     instr_ip,
                 ));
+            }
+            InstructionOperands::ArrayLit(ArrayLiteralOperands { mut members, dense: _ }) => {
+                let mut stack_values = 0;
+                while let Some(member) = members.next_infallible(&mut ecx.0) {
+                    match member {
+                        ArrayLiteralElement::Single(()) | ArrayLiteralElement::Spread(()) => stack_values += 1,
+                        ArrayLiteralElement::Hole(_) => {}
+                    }
+                }
+                stmts.push(Stmt::Generic(GenericStmt::ArrayLit { stack_values }, instr_ip));
             }
             InstructionOperands::Jmp(JmpOperands(offset))
             | InstructionOperands::LoopBackJmp(LoopBackjumpOperands { offset, hotness: _ }) => {

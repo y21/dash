@@ -430,9 +430,11 @@ fn apply_stmt(state: &mut BlockState, stmt: &Stmt) {
                 state.stack.push(out_ty);
             }
             GenericStmt::BuiltinIntrinsicCall { argc } => {
-                for _ in 0..argc {
-                    state.stack.pop().unwrap();
-                }
+                state.stack.truncate(state.stack.len() - usize::from(argc));
+                state.stack.push(ValueMetadata { ty: ValueType::Any });
+            }
+            GenericStmt::ArrayLit { stack_values } => {
+                state.stack.truncate(state.stack.len() - stack_values);
                 state.stack.push(ValueMetadata { ty: ValueType::Any });
             }
         },

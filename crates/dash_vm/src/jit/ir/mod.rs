@@ -110,6 +110,9 @@ pub enum GenericStmt {
     BitShlNumLR,
     BitShrNumLR,
     BitUshrNumLR,
+    ArrayLit {
+        stack_values: usize,
+    },
     BuiltinIntrinsicCall {
         argc: u8,
     },

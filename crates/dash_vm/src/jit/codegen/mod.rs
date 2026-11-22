@@ -394,6 +394,7 @@ impl<'a> CodegenCx<'a> {
                     GenericStmt::DynamicPropAssign { .. } => {
                         self.codegen_handler_stub(Instruction::DynamicPropAssign, ip)
                     }
+                    GenericStmt::ArrayLit { stack_values: _ } => self.codegen_handler_stub(Instruction::ArrayLit, ip),
                 },
                 Stmt::Number(num) => self.codegen_push_value(Value::number(num).raw()),
                 Stmt::Boolean(value) => self.codegen_push_value(Value::boolean(value).raw()),
