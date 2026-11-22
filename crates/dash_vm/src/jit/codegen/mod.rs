@@ -731,6 +731,15 @@ impl<'a> CodegenCx<'a> {
                     jmp_synthetic_label(&mut self.buf, SyntheticLabel::Exit);
                 }
             },
+            Terminator::Return { ip } => {
+                self.codegen_handler_stub(Instruction::Ret, ip);
+                // Special handling for flat calls:
+                // Normally, for generic calls, the Ret dispatch handler above would've already caused us to jump to the stub status handler block,
+                // however flat calls only pop a frame and let execution continue as normal and we get here.
+                // So if we get to this point, manually jump to the stub status handler.
+                mov_reg_imm32(&mut self.buf, REG_RETURN32, HandlerStubStatus::FlatCallReturn as u32);
+                jmp_synthetic_label(&mut self.buf, SyntheticLabel::StubStatusHandler);
+            }
             Terminator::ConditionalGoto {
                 true_,
                 false_,

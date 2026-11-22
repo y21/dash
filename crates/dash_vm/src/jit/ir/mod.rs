@@ -218,6 +218,9 @@ pub enum Terminator {
         pop: ConditionalGotoPopPolicy,
         condition: ConditionalGotoCondition,
     },
+    Return {
+        ip: Ip,
+    },
 }
 
 impl Terminator {
@@ -235,6 +238,9 @@ impl Terminator {
             } => {
                 f(true_);
                 f(false_);
+            }
+            Terminator::Return { ip: _ } => {
+                // No targets
             }
         }
     }

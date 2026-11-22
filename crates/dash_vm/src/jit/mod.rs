@@ -5,7 +5,7 @@ use std::ops::{Bound, Index, RangeBounds};
 use std::rc::Rc;
 
 use crate::Vm;
-use crate::dispatch::{DispatchContext, INSTRUCTION_LUT};
+use crate::dispatch::{DispatchContext, HandleResult, INSTRUCTION_LUT};
 use crate::frame::Ip;
 use crate::jit::codegen::CompileResult;
 use crate::jit::ir::{ConditionalGotoCondition, ConditionalGotoPopPolicy};
@@ -79,6 +79,10 @@ impl JitFnHandle {
             HandlerStubStatus::PreludeTypeMismatchBailout => {
                 JitReturn::PreludeTypeMismatchBailout { ip: Ip(unsafe { *ip }) }
             }
+            HandlerStubStatus::Return => JitReturn::Return {
+                value: unsafe { ret.payload.value },
+            },
+            HandlerStubStatus::FlatCallReturn => JitReturn::FlatCallReturn,
             HandlerStubStatus::Exception => {
                 let exception = unsafe { ret.payload.value };
                 JitReturn::Exception { value: exception }
@@ -92,9 +96,18 @@ type InternalJitReturn = HandlerStubReturn;
 #[derive(Debug)]
 pub enum JitReturn {
     /// JIT code returns normally at the given bytecode ip.
+    /// IP needs to be synchronized with the interpreter state.
     Normal {
         ip: Ip,
     },
+    /// A return from the currently executing function.
+    Return {
+        value: Unrooted,
+    },
+    /// A return from a flat call. The return value is on the stack.
+    /// The frame has already been popped and execution is expected to continue in the interpreter as usual.
+    /// Interpreter state such as IP is already synchronized.
+    FlatCallReturn,
     PreludeTypeMismatchBailout {
         ip: Ip,
     },
@@ -107,6 +120,8 @@ pub enum JitReturn {
 #[repr(C)]
 pub enum HandlerStubStatus {
     Normal,
+    Return,
+    FlatCallReturn,
     PreludeTypeMismatchBailout,
     Exception,
 }
@@ -131,7 +146,11 @@ extern "C" fn handler_stub(vm: &mut Vm, _: *mut JitOutData, handler: u8, ip: u32
     let result = INSTRUCTION_LUT[handler as usize](cx);
 
     match result {
-        Ok(Some(_)) => todo!(),
+        Ok(Some(HandleResult::Return(value))) => HandlerStubReturn {
+            status: HandlerStubStatus::Return,
+            payload: HandlerStubPayload { value },
+        },
+        Ok(Some(HandleResult::Await(_) | HandleResult::Yield(_))) => todo!("await/yield unhandled"),
         Ok(None) => HandlerStubReturn {
             status: HandlerStubStatus::Normal,
             payload: HandlerStubPayload { uninit: () },

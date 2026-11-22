@@ -13,7 +13,7 @@ use dash_middle::compiler::operands::{
     JmpTruePopOperands, JmpUndefinedNoPopOperands, JmpUndefinedPopOperands, LdGlobalOperands, LdLocalExtOperands,
     LdLocalOperands, LeOperands, LoopBackjumpOperands, LtOperands, MulOperands, NeOperands, NegOperands, NotOperands,
     NumberConstantOperands, NumberConstantWide, NumberInline8, NumberInline32, ObjectInOperands,
-    OptionDiscriminatedByte, PopOperands, PosOperands, PowOperands, RegexConstantOperands, RemOperands,
+    OptionDiscriminatedByte, PopOperands, PosOperands, PowOperands, RegexConstantOperands, RemOperands, RetOperands,
     StaticPropertyAccessOperands, StaticPropertyAssignOperands, StoreGlobalOperands, StoreLocalExtOperands,
     StoreLocalOperands, StrictEqOperands, StrictNeOperands, StringConstantOperands, SubOperands, SymbolConstantWide,
     ThrowOperands, TypeofIdentOperands, TypeofOperands,
@@ -663,6 +663,10 @@ fn lower_from_ip(
                     ConditionalGotoPopPolicy::Pop,
                     ConditionalGotoCondition::IsUndefined,
                 )?);
+                break;
+            }
+            InstructionOperands::Ret(RetOperands { .. }) => {
+                terminator = Some(Terminator::Return { ip: instr_ip });
                 break;
             }
             _ => {

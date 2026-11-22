@@ -1159,6 +1159,12 @@ mod handlers {
                                 cx.frames.set_ip(ip);
                                 return Ok(None);
                             }
+                            jit::JitReturn::FlatCallReturn => {
+                                return Ok(None);
+                            }
+                            jit::JitReturn::Return { value } => {
+                                return Ok(Some(HandleResult::Return(value)));
+                            }
                             jit::JitReturn::PreludeTypeMismatchBailout { ip } => {
                                 let fn_name = cx.function_name_iter().next_back().unwrap();
                                 dash_log::warn!(

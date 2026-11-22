@@ -149,6 +149,9 @@ fn apply_terminator(state: &mut BlockState, terminator: &Terminator) {
             ConditionalGotoPopPolicy::Pop => drop(state.stack.pop().unwrap()),
             ConditionalGotoPopPolicy::Peek => {}
         },
+        Terminator::Return { ip: _ } => {
+            state.stack.pop().unwrap();
+        }
     }
 }
 
