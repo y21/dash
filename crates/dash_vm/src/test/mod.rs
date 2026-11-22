@@ -1002,3 +1002,18 @@ jit_test!(
     loop(200, true, 200);
     "
 );
+
+jit_test!(
+    jit_array_literal_return_flat_call,
+    "
+    function flat() {
+        for (let i = 0; i < 300; i++) {
+            if (i === 200) return [i, i + 1];
+        }
+    }
+    let flat_result = flat();
+    let non_flat_result = flat.call(null);
+    assert(flat_result[0] === 200 && flat_result[1] === 201);
+    assert(non_flat_result[0] === 200 && non_flat_result[1] === 201);
+    "
+);
