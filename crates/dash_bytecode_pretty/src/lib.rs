@@ -34,7 +34,7 @@ fn pretty_into(out: &mut String, name: &str, bytecode: &[u8], constants: &Consta
         let func = &constants.functions[func];
         let name = func.name.map(|name| interner.resolve(name)).unwrap_or("<anonymous>");
         func.buffer.with(|buffer| {
-            pretty_into(out, name, buffer, constants, interner);
+            pretty_into(out, name, buffer, &func.constants, interner);
         });
     }
 }
