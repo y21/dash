@@ -84,9 +84,9 @@ impl Object for Error {
         }
     }
 
-    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+    fn set_property(&self, _this: Value, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
         // TODO: this should special case name/stack
-        self.obj.set_property(key, value, sc)
+        self.obj.set_property(_this, key, value, sc)
     }
 
     fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {

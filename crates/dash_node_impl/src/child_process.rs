@@ -5,7 +5,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::array::{Array, ArrayIterator};
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{Object, OrdObject, PropertyValue};
+use dash_vm::value::object::{OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{ExceptionContext, Root, Value};
@@ -15,7 +15,7 @@ use crate::state::state_mut;
 use crate::symbols::NodeSymbols;
 
 pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
-    let exports = OrdObject::new(sc);
+    let exports = sc.register(OrdObject::new(sc));
     let NodeSymbols {
         spawnSync: spawn_sync_sym,
         ..
@@ -28,7 +28,7 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         sc,
     )?;
 
-    Ok(sc.register(exports).into())
+    Ok(exports.into())
 }
 
 fn spawn_sync(cx: CallContext) -> Result<Value, Value> {
@@ -109,7 +109,7 @@ fn spawn_sync(cx: CallContext) -> Result<Value, Value> {
     );
     let output = cx.scope.register(output);
 
-    let result = OrdObject::new(cx.scope);
+    let result = cx.scope.register(OrdObject::new(cx.scope));
     result.set_property(
         output_sym.to_key(cx.scope),
         PropertyValue::static_default(Value::object(output)),
@@ -140,5 +140,5 @@ fn spawn_sync(cx: CallContext) -> Result<Value, Value> {
         cx.scope,
     )?;
 
-    Ok(cx.scope.register(result).into())
+    Ok(result.into())
 }

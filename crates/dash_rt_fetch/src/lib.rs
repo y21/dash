@@ -75,14 +75,14 @@ fn fetch(cx: CallContext) -> Result<Value, Value> {
 
             let (req, action) = match req {
                 Ok(resp) => {
-                    let obj = HttpResponse::new(resp, &sc);
+                    let obj = sc.register(HttpResponse::new(resp, &sc));
                     let text = sc.intern("text");
                     let text_fun = Value::object(register_native_fn(&mut sc, text, false, http_response_text));
 
                     obj.set_property(text.to_key(&mut sc), PropertyValue::static_default(text_fun), &mut sc)
                         .unwrap();
 
-                    (Value::object(sc.register(obj)), PromiseAction::Resolve)
+                    (Value::object(obj), PromiseAction::Resolve)
                 }
                 Err(err) => {
                     let err = Error::new(&mut sc, err.to_string());

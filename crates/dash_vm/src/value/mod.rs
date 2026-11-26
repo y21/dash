@@ -292,16 +292,22 @@ impl Object for Value {
         }
     }
 
-    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        this: Value,
+        key: PropertyKey,
+        value: PropertyValue,
+        sc: &mut LocalScope,
+    ) -> Result<(), Value> {
         match self.unpack() {
-            ValueKind::Object(h) => h.set_property(key, value, sc),
-            ValueKind::Number(n) => n.set_property(key, value, sc),
-            ValueKind::Boolean(b) => b.set_property(key, value, sc),
-            ValueKind::String(s) => s.set_property(key, value, sc),
-            ValueKind::External(h) => h.set_property(key, value, sc),
-            ValueKind::Undefined(u) => u.set_property(key, value, sc),
-            ValueKind::Null(n) => n.set_property(key, value, sc),
-            ValueKind::Symbol(s) => s.set_property(key, value, sc),
+            ValueKind::Object(h) => Object::set_property(&h, this, key, value, sc),
+            ValueKind::Number(n) => n.set_property(this, key, value, sc),
+            ValueKind::Boolean(b) => b.set_property(this, key, value, sc),
+            ValueKind::String(s) => s.set_property(this, key, value, sc),
+            ValueKind::External(h) => h.set_property(this, key, value, sc),
+            ValueKind::Undefined(u) => u.set_property(this, key, value, sc),
+            ValueKind::Null(n) => n.set_property(this, key, value, sc),
+            ValueKind::Symbol(s) => s.set_property(this, key, value, sc),
         }
     }
 
@@ -728,6 +734,19 @@ impl Value {
         }
     }
 
+    pub fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+        match self.unpack() {
+            ValueKind::Object(o) => o.set_property(key, value, sc),
+            ValueKind::Number(n) => n.set_property(*self, key, value, sc),
+            ValueKind::Boolean(b) => b.set_property(*self, key, value, sc),
+            ValueKind::String(s) => s.set_property(*self, key, value, sc),
+            ValueKind::External(o) => o.inner(sc).set_property(key, value, sc),
+            ValueKind::Undefined(u) => u.set_property(*self, key, value, sc),
+            ValueKind::Null(n) => n.set_property(*self, key, value, sc),
+            ValueKind::Symbol(s) => s.set_property(*self, key, value, sc),
+        }
+    }
+
     pub fn apply(&self, this: This, args: CallArgs, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
         match self.unpack() {
             ValueKind::Object(o) => o.apply(this, args, sc),
@@ -1003,9 +1022,15 @@ impl<O: Object + 'static> Object for PureBuiltin<O> {
         type_of
     );
 
-    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        this: Value,
+        key: PropertyKey,
+        value: PropertyValue,
+        sc: &mut LocalScope,
+    ) -> Result<(), Value> {
         sc.impure_builtins();
-        self.inner.set_property(key, value, sc)
+        self.inner.set_property(this, key, value, sc)
     }
 
     fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {

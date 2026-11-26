@@ -40,10 +40,9 @@ impl ModuleLoader for HttpModule {
         let module = OrdObject::new(sc);
         let key = sc.intern("listen");
         let listen = register_native_fn(sc, key, false, listen);
-        module.set_property(key.to_key(sc), PropertyValue::static_default(listen.into()), sc)?;
-
-        let module = sc.register(module);
-        Ok(Some(module.into()))
+        let module_id = sc.register(module);
+        module_id.set_property(key.to_key(sc), PropertyValue::static_default(listen.into()), sc)?;
+        Ok(Some(module_id.into()))
     }
 }
 
@@ -89,17 +88,19 @@ pub fn listen(cx: CallContext) -> Result<Value, Value> {
 
                     let cb = cb.get();
 
-                    let ctx = HttpContext::new(&mut scope, req_tx);
+                    let ctx_obj = HttpContext::new(&mut scope, req_tx);
+                    let ctx_id = scope.register(ctx_obj);
                     let name = scope.intern("respond");
                     let fun = register_native_fn(&mut scope, name, false, ctx_respond);
-                    ctx.set_property(
-                        name.to_key(&mut scope),
-                        PropertyValue::static_default(fun.into()),
-                        &mut scope,
-                    )
-                    .unwrap();
+                    ctx_id
+                        .set_property(
+                            name.to_key(&mut scope),
+                            PropertyValue::static_default(fun.into()),
+                            &mut scope,
+                        )
+                        .unwrap();
 
-                    let ctx = Value::object(scope.register(ctx));
+                    let ctx = Value::object(ctx_id);
 
                     if let Err(err) = cb.apply(This::default(), [ctx].into(), &mut scope).root_err(&mut scope) {
                         match err.to_js_string(&mut scope) {

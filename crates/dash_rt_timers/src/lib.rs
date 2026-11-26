@@ -11,7 +11,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::args::CallArgs;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{Object, OrdObject, PropertyValue, This};
+use dash_vm::value::object::{OrdObject, PropertyValue, This};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
@@ -36,7 +36,7 @@ impl ModuleLoader for TimersModule {
 }
 
 pub fn import(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
-    let obj = OrdObject::new(sc);
+    let obj = sc.register(OrdObject::new(sc));
 
     let set_timeout_sym = sc.intern("setTimeout");
     let set_timeout = register_native_fn(sc, set_timeout_sym, false, set_timeout);
@@ -55,7 +55,7 @@ pub fn import(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
         sc,
     )?;
 
-    Ok(Value::object(sc.register(obj)))
+    Ok(Value::object(obj))
 }
 
 fn set_timeout(cx: CallContext) -> Result<Value, Value> {

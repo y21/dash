@@ -100,7 +100,7 @@ impl Object for JsString {
         Ok(None)
     }
 
-    fn set_property(&self, _: PropertyKey, _: PropertyValue, _: &mut LocalScope) -> Result<(), Value> {
+    fn set_property(&self, _this: Value, _: PropertyKey, _: PropertyValue, _: &mut LocalScope) -> Result<(), Value> {
         Ok(())
     }
 

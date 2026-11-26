@@ -134,7 +134,13 @@ impl Object for TypedArray {
         self.obj.get_own_property_descriptor(key, sc)
     }
 
-    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _this: Value,
+        key: PropertyKey,
+        value: PropertyValue,
+        sc: &mut LocalScope,
+    ) -> Result<(), Value> {
         if let Some(index) = key.index_usize() {
             let arraybuffer = self.arraybuffer.extract::<ArrayBuffer>(sc);
 
@@ -177,7 +183,7 @@ impl Object for TypedArray {
             }
         }
 
-        self.obj.set_property(key, value, sc)
+        self.obj.set_property(_this, key, value, sc)
     }
 
     fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {

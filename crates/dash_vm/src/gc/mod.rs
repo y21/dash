@@ -37,7 +37,7 @@ pub struct ObjectVTable {
     pub(crate) js_get_property_descriptor:
         unsafe fn(*const (), PropertyKey, &mut LocalScope<'_>) -> Result<Option<PropertyValue>, Unrooted>,
     pub(crate) js_set_property:
-        unsafe fn(*const (), PropertyKey, PropertyValue, &mut LocalScope<'_>) -> Result<(), Value>,
+        unsafe fn(*const (), Value, PropertyKey, PropertyValue, &mut LocalScope<'_>) -> Result<(), Value>,
     pub(crate) js_delete_property: unsafe fn(*const (), PropertyKey, &mut LocalScope<'_>) -> Result<Unrooted, Value>,
     pub(crate) js_set_prototype: unsafe fn(*const (), Value, &mut LocalScope<'_>) -> Result<(), Value>,
     pub(crate) js_get_prototype: unsafe fn(*const (), &mut LocalScope<'_>) -> Result<Value, Value>,
@@ -74,8 +74,8 @@ macro_rules! object_vtable_for_ty {
                 js_get_property_descriptor: |ptr, key, scope| unsafe {
                     <$ty as Object>::get_property_descriptor(&*(ptr.cast::<$ty>()), key, scope)
                 },
-                js_set_property: |ptr, key, value, scope| unsafe {
-                    <$ty as Object>::set_property(&*(ptr.cast::<$ty>()), key, value, scope)
+                js_set_property: |ptr, this, key, value, scope| unsafe {
+                    <$ty as Object>::set_property(&*(ptr.cast::<$ty>()), this, key, value, scope)
                 },
                 js_delete_property: |ptr, key, scope| unsafe {
                     <$ty as Object>::delete_property(&*(ptr.cast::<$ty>()), key, scope)

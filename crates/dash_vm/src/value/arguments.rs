@@ -21,14 +21,21 @@ impl Arguments {
         let args = args.into_iter();
         let len = args.len();
         let object = OrdObject::new(scope);
+        let this = Value::undefined();
 
         for (idx, arg) in args.enumerate() {
             object
-                .set_property(idx.to_key(scope), PropertyValue::static_non_enumerable(arg), scope)
+                .set_property(
+                    this,
+                    idx.to_key(scope),
+                    PropertyValue::static_non_enumerable(arg),
+                    scope,
+                )
                 .unwrap();
         }
         object
             .set_property(
+                this,
                 sym::length.to_key(scope),
                 PropertyValue::static_default(Value::number(len as f64)),
                 scope,

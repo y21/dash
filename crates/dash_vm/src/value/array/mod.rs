@@ -234,7 +234,13 @@ impl Object for Array {
         self.obj.get_property_descriptor(key, sc)
     }
 
-    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _this: Value,
+        key: PropertyKey,
+        value: PropertyValue,
+        sc: &mut LocalScope,
+    ) -> Result<(), Value> {
         if let Some(index) = key.index() {
             if index < MAX_LENGTH {
                 self.items.borrow_mut().set(index, value);
@@ -251,7 +257,7 @@ impl Object for Array {
             throw!(sc, RangeError, "Invalid array length")
         }
 
-        self.obj.set_property(key, value, sc)
+        self.obj.set_property(_this, key, value, sc)
     }
 
     fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {

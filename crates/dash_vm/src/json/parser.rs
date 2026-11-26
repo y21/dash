@@ -7,7 +7,7 @@ use dash_middle::util;
 use crate::localscope::LocalScope;
 use crate::value::Value;
 use crate::value::array::Array;
-use crate::value::object::{Object, OrdObject, PropertyValue};
+use crate::value::object::{OrdObject, PropertyValue};
 use crate::value::propertykey::ToPropertyKey;
 
 /// An error that occurred during parsing JSON
@@ -178,7 +178,7 @@ impl<'a, 'sc, 'vm> Parser<'a, 'sc, 'vm> {
             b'{' => {
                 self.idx += 1;
 
-                let obj = OrdObject::new(self.sc);
+                let obj = self.sc.register(OrdObject::new(self.sc));
                 while let Some(cur) = self.skip_to_relevant_token() {
                     match cur {
                         b'}' => break,
@@ -200,7 +200,7 @@ impl<'a, 'sc, 'vm> Parser<'a, 'sc, 'vm> {
                         .unwrap();
                 }
 
-                Ok(Value::object(self.sc.register(obj)))
+                Ok(Value::object(obj))
             }
             b'"' => {
                 let string = self.read_string_literal()?;

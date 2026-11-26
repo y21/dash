@@ -6,7 +6,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::Value;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{Object, OrdObject, PropertyValue};
+use dash_vm::value::object::{OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
@@ -23,7 +23,7 @@ impl ModuleLoader for DllModule {
             return Ok(None);
         }
 
-        let object = OrdObject::new(sc);
+        let object = sc.register(OrdObject::new(sc));
         let load = sc.intern("load");
         let load_sync = register_native_fn(sc, load, false, load_sync);
         object.set_property(
@@ -32,7 +32,7 @@ impl ModuleLoader for DllModule {
             sc,
         )?;
 
-        Ok(Some(Value::object(sc.register(object))))
+        Ok(Some(Value::object(object)))
     }
 }
 

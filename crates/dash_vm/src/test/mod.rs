@@ -6,7 +6,7 @@ use dash_middle::interner::sym;
 use crate::Vm;
 use crate::gc::ObjectId;
 use crate::gc::persistent::Persistent;
-use crate::value::object::{Object, OrdObject, PropertyValue};
+use crate::value::object::{OrdObject, PropertyValue};
 use crate::value::primitive::{Null, Number, Symbol, Undefined};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Unpack, Value, ValueKind};
@@ -137,7 +137,7 @@ fn persistent_trace() {
     let object = {
         let mut scope = vm.scope();
         let dummy_string = scope.register(OrdObject::null());
-        let object = OrdObject::new(&scope);
+        let object = scope.register(OrdObject::new(&scope));
         let key = scope.intern("foo");
         object
             .set_property(
@@ -146,7 +146,7 @@ fn persistent_trace() {
                 &mut scope,
             )
             .unwrap();
-        scope.register(object)
+        object.into()
     }; // scope dropped here
 
     assert!(vm.external_refs.0.borrow().is_empty());

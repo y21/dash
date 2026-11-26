@@ -31,15 +31,15 @@ pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
     } = state_mut(sc).sym;
 
     let event_emitter_prototype = {
-        let event_emitter_prototype = EventEmitter {
+        let event_emitter_prototype = sc.register(EventEmitter {
             object: OrdObject::new(sc),
             handlers: RefCell::new(FxHashMap::default()),
-        };
+        });
         let on_fn = register_native_fn(sc, on_sym, false, on);
         event_emitter_prototype.set_property(on_sym.to_key(sc), PropertyValue::static_default(on_fn.into()), sc)?;
         let emit_fn = register_native_fn(sc, emit_sym, false, emit);
         event_emitter_prototype.set_property(emit_sym.to_key(sc), PropertyValue::static_default(emit_fn.into()), sc)?;
-        sc.register(event_emitter_prototype)
+        event_emitter_prototype
     };
 
     let event_emitter_ctor = Function::builder(FunctionKind::Native {

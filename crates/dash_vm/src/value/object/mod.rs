@@ -83,7 +83,13 @@ pub trait Object: Debug + Trace {
         }
     }
 
-    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value>;
+    fn set_property(
+        &self,
+        this: Value,
+        key: PropertyKey,
+        value: PropertyValue,
+        sc: &mut LocalScope,
+    ) -> Result<(), Value>;
 
     fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value>;
 
@@ -154,11 +160,12 @@ macro_rules! delegate {
     (override $field:ident, set_property) => {
         fn set_property(
             &self,
+            this: $crate::value::Value,
             key: $crate::value::propertykey::PropertyKey,
             value: $crate::value::object::PropertyValue,
             sc: &mut $crate::localscope::LocalScope,
         ) -> Result<(), $crate::value::Value> {
-            self.$field.set_property(key, value, sc)
+            $crate::value::object::Object::set_property(&self.$field, this, key, value, sc)
         }
     };
     (override $field:ident, delete_property) => {
@@ -326,7 +333,7 @@ impl PropertyValue {
     }
 
     pub fn to_descriptor_value(&self, sc: &mut LocalScope) -> Result<Value, Value> {
-        let obj = OrdObject::new(sc);
+        let obj = sc.register(OrdObject::new(sc));
 
         match self.kind {
             PropertyValueKind::Static(value) => {
@@ -364,7 +371,7 @@ impl PropertyValue {
             sc,
         )?;
 
-        Ok(Value::object(sc.register(obj)))
+        Ok(obj.into())
     }
 
     pub fn from_descriptor_value(sc: &mut LocalScope<'_>, value: Value) -> Result<Self, Value> {
@@ -540,8 +547,14 @@ impl Object for ObjectId {
         unsafe { (self.vtable(sc).js_get_property_descriptor)(self.data_ptr(sc), key, sc) }
     }
 
-    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
-        unsafe { (self.vtable(sc).js_set_property)(self.data_ptr(sc), key, value, sc) }
+    fn set_property(
+        &self,
+        this: Value,
+        key: PropertyKey,
+        value: PropertyValue,
+        sc: &mut LocalScope,
+    ) -> Result<(), Value> {
+        unsafe { (self.vtable(sc).js_set_property)(self.data_ptr(sc), this, key, value, sc) }
     }
 
     fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
@@ -611,6 +624,10 @@ impl ObjectId {
 
     pub fn get_own_property(self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {
         Object::get_own_property(&self, This::bound(Value::object(self)), key, sc)
+    }
+
+    pub fn set_property(self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+        Object::set_property(&self, Value::object(self), key, value, sc)
     }
 
     pub fn apply(&self, this: This, args: CallArgs, sc: &mut LocalScope) -> Result<Unrooted, Unrooted> {

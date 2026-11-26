@@ -6,7 +6,7 @@ use dash_middle::interner::sym;
 use dash_vm::eval::EvalError;
 use dash_vm::params::VmParams;
 use dash_vm::value::function::native::register_native_fn;
-use dash_vm::value::object::{Object, PropertyValue};
+use dash_vm::value::object::PropertyValue;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
 use dash_vm::value::{Root, Unpack, Unrooted, Value, ValueKind};

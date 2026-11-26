@@ -3,14 +3,14 @@ use std::env;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::Value;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{Object, OrdObject, PropertyValue};
+use dash_vm::value::object::{OrdObject, PropertyValue};
 use dash_vm::value::propertykey::ToPropertyKey;
 
 use crate::state::state_mut;
 use crate::symbols::NodeSymbols;
 
 pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
-    let exports = OrdObject::new(sc);
+    let exports = sc.register(OrdObject::new(sc));
     let NodeSymbols { tmpdir: tmpdir_sym, .. } = state_mut(sc).sym;
     let tmpdir_fn = register_native_fn(sc, tmpdir_sym, false, tmpdir);
     exports.set_property(

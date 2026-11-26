@@ -196,7 +196,7 @@ fn create_process_object<'a>(
     path: &'a str,
     script_args: impl Iterator<Item = &'a str>,
 ) -> anyhow::Result<ObjectId> {
-    let obj = OrdObject::new(sc);
+    let obj = sc.register(OrdObject::new(sc));
     let env = OrdObject::new(sc);
     let env = sc.register(env);
     let env_k = sc.intern("env");
@@ -226,7 +226,7 @@ fn create_process_object<'a>(
 
     let versions_k = sc.intern("versions");
     let dash_k = sc.intern("dash");
-    let versions = OrdObject::new(sc);
+    let versions = sc.register(OrdObject::new(sc));
     let version = sc.intern(env!("CARGO_PKG_VERSION"));
     versions
         .set_property(

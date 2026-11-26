@@ -4,7 +4,7 @@ use dash_middle::interner::sym;
 use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{Object, OrdObject, PropertyValue};
+use dash_vm::value::object::{OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::{ExceptionContext, Unpack, Value, ValueKind};
@@ -13,7 +13,7 @@ use crate::state::state_mut;
 use crate::symbols::NodeSymbols;
 
 pub fn init_module(sc: &mut LocalScope<'_>) -> Result<Value, Value> {
-    let exports = OrdObject::new(sc);
+    let exports = sc.register(OrdObject::new(sc));
     let NodeSymbols {
         parse: parse_sym,
         isAbsolute: is_absolute_sym,

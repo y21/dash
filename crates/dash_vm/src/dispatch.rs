@@ -1334,6 +1334,7 @@ mod handlers {
         let ObjectLiteralOperands { mut members } = extract_back_infallible(&mut cx);
 
         let obj = OrdObject::new(&cx.scope);
+        let this = Value::undefined();
         while let Some(property) = members.next_infallible(&mut cx) {
             match property {
                 ObjectProperty::StaticGetter { key, value } => {
@@ -1344,10 +1345,10 @@ mod handlers {
 
                     match obj.get_own_property_descriptor(key, &mut cx.scope)? {
                         Some(prop) => {
-                            obj.set_property(key, prop.with_getter(getter), &mut cx.scope)?;
+                            obj.set_property(this, key, prop.with_getter(getter), &mut cx.scope)?;
                         }
                         None => {
-                            obj.set_property(key, PropertyValue::getter_default(getter), &mut cx.scope)?;
+                            obj.set_property(this, key, PropertyValue::getter_default(getter), &mut cx.scope)?;
                         }
                     }
                 }
@@ -1359,10 +1360,10 @@ mod handlers {
 
                     match obj.get_own_property_descriptor(key, &mut cx.scope)? {
                         Some(prop) => {
-                            obj.set_property(key, prop.with_getter(getter), &mut cx.scope)?;
+                            obj.set_property(this, key, prop.with_getter(getter), &mut cx.scope)?;
                         }
                         None => {
-                            obj.set_property(key, PropertyValue::getter_default(getter), &mut cx.scope)?;
+                            obj.set_property(this, key, PropertyValue::getter_default(getter), &mut cx.scope)?;
                         }
                     }
                 }
@@ -1374,10 +1375,10 @@ mod handlers {
 
                     match obj.get_own_property_descriptor(key, &mut cx.scope)? {
                         Some(prop) => {
-                            obj.set_property(key, prop.with_setter(setter), &mut cx.scope)?;
+                            obj.set_property(this, key, prop.with_setter(setter), &mut cx.scope)?;
                         }
                         None => {
-                            obj.set_property(key, PropertyValue::setter_default(setter), &mut cx.scope)?;
+                            obj.set_property(this, key, PropertyValue::setter_default(setter), &mut cx.scope)?;
                         }
                     }
                 }
@@ -1389,27 +1390,27 @@ mod handlers {
 
                     match obj.get_own_property_descriptor(key, &mut cx.scope)? {
                         Some(prop) => {
-                            obj.set_property(key, prop.with_setter(setter), &mut cx.scope)?;
+                            obj.set_property(this, key, prop.with_setter(setter), &mut cx.scope)?;
                         }
                         None => {
-                            obj.set_property(key, PropertyValue::setter_default(setter), &mut cx.scope)?;
+                            obj.set_property(this, key, PropertyValue::setter_default(setter), &mut cx.scope)?;
                         }
                     }
                 }
                 ObjectProperty::Static { key, value } => {
                     let key = key.0.to_key(&mut cx.scope);
-                    obj.set_property(key, PropertyValue::static_default(value), &mut cx.scope)?;
+                    obj.set_property(this, key, PropertyValue::static_default(value), &mut cx.scope)?;
                 }
                 ObjectProperty::Dynamic { key, value } => {
                     let key = PropertyKey::from_value(&mut cx.scope, key)?;
-                    obj.set_property(key, PropertyValue::static_default(value), &mut cx.scope)?;
+                    obj.set_property(this, key, PropertyValue::static_default(value), &mut cx.scope)?;
                 }
                 ObjectProperty::Spread(value) => {
                     if let ValueKind::Object(object) = value.unpack() {
                         for key in object.own_keys(&mut cx.scope, OwnKeysMode::OnlyEnumerable)? {
                             let key = PropertyKey::from_value(&mut cx.scope, key)?;
                             if let Some(value) = object.get_own_property_descriptor(key, &mut cx.scope)? {
-                                obj.set_property(key, value, &mut cx.scope)?;
+                                obj.set_property(this, key, value, &mut cx.scope)?;
                             }
                         }
                     }

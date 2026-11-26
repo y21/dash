@@ -1,14 +1,13 @@
+use dash_ast_passes::type_infer::name_res;
 use dash_compiler::FunctionCompiler;
 use dash_lexer::Lexer;
-use dash_middle::compiler::StaticImportKind;
+use dash_middle::compiler::{OptLevel, StaticImportKind};
 use dash_middle::interner::sym;
-use dash_middle::compiler::OptLevel;
-use dash_ast_passes::type_infer::name_res;
 use dash_parser::Parser;
 
 use crate::frame::Frame;
 use crate::localscope::LocalScope;
-use crate::value::object::{Object, OrdObject, PropertyValue};
+use crate::value::object::{OrdObject, PropertyValue};
 use crate::value::propertykey::ToPropertyKey;
 use crate::value::{Root, Unrooted, Value};
 use crate::{Vm, throw};
@@ -63,14 +62,14 @@ impl Vm {
                 }
             },
             StaticImportKind::All => {
-                let export_obj = OrdObject::new(sc);
+                let export_obj = sc.register(OrdObject::new(sc));
 
                 if let Some(default) = exports.default {
                     let default = default.root(sc);
                     export_obj.set_property(sym::default.to_key(sc), PropertyValue::static_default(default), sc)?;
                 }
 
-                Value::object(sc.register(export_obj))
+                export_obj.into()
             }
         };
 

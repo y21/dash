@@ -32,7 +32,13 @@ impl Object for f64 {
         Ok(None)
     }
 
-    fn set_property(&self, _key: PropertyKey, _value: PropertyValue, _sc: &mut LocalScope) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _this: Value,
+        _key: PropertyKey,
+        _value: PropertyValue,
+        _sc: &mut LocalScope,
+    ) -> Result<(), Value> {
         Ok(())
     }
 
@@ -83,7 +89,13 @@ impl Object for bool {
         Ok(None)
     }
 
-    fn set_property(&self, _key: PropertyKey, _value: PropertyValue, _sc: &mut LocalScope) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _this: Value,
+        _key: PropertyKey,
+        _value: PropertyValue,
+        _sc: &mut LocalScope,
+    ) -> Result<(), Value> {
         Ok(())
     }
 
@@ -152,7 +164,13 @@ impl Object for Undefined {
         throw!(sc, TypeError, "Cannot read property {} of undefined", key)
     }
 
-    fn set_property(&self, key: PropertyKey, _value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _this: Value,
+        key: PropertyKey,
+        _value: PropertyValue,
+        sc: &mut LocalScope,
+    ) -> Result<(), Value> {
         let key = key.any_js_string(sc);
         let key = sc.interner.resolve(key).to_owned();
         throw!(sc, TypeError, "Cannot set property {:?} of undefined", key)
@@ -202,7 +220,13 @@ impl Object for Null {
         throw!(sc, TypeError, "Cannot read property {} of null", key)
     }
 
-    fn set_property(&self, key: PropertyKey, _value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _this: Value,
+        key: PropertyKey,
+        _value: PropertyValue,
+        sc: &mut LocalScope,
+    ) -> Result<(), Value> {
         let key = key.any_js_string(sc);
         let key = sc.interner.resolve(key).to_owned();
         throw!(sc, TypeError, "Cannot set property {:?} of null", key)
@@ -262,7 +286,13 @@ impl Object for Symbol {
         Ok(None)
     }
 
-    fn set_property(&self, _key: PropertyKey, _value: PropertyValue, _sc: &mut LocalScope) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _this: Value,
+        _key: PropertyKey,
+        _value: PropertyValue,
+        _sc: &mut LocalScope,
+    ) -> Result<(), Value> {
         Ok(())
     }
 
@@ -501,8 +531,14 @@ impl Object for Number {
         self.0.get_own_property_descriptor(key, sc)
     }
 
-    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
-        self.0.set_property(key, value, sc)
+    fn set_property(
+        &self,
+        _this: Value,
+        key: PropertyKey,
+        value: PropertyValue,
+        sc: &mut LocalScope,
+    ) -> Result<(), Value> {
+        self.0.set_property(_this, key, value, sc)
     }
 
     fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {

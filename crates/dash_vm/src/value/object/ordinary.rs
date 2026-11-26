@@ -212,7 +212,13 @@ impl Object for OrdObject {
         get_own_property_descriptor_inline(&cell, key)
     }
 
-    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope<'_>) -> Result<(), Value> {
+    fn set_property(
+        &self,
+        _this: Value,
+        key: PropertyKey,
+        value: PropertyValue,
+        sc: &mut LocalScope<'_>,
+    ) -> Result<(), Value> {
         // TODO: stop handling __proto__ here and do that in the handler instead? the way we do that here is kinda wrong.
         // SAFETY: no reentrancy possible from here
         let mut guard = unsafe { self.0.borrow_mut() };
@@ -226,7 +232,7 @@ impl Object for OrdObject {
                     let prototype = *prototype;
                     *guard = InnerOrdObject::Linear(PropertyVec::new(prototype));
                     drop(guard);
-                    self.set_property(key, value, sc)
+                    Object::set_property(self, _this, key, value, sc)
                 }
             }
             InnerOrdObject::Linear(property_vec) => {
@@ -1233,7 +1239,7 @@ mod tests {
     fn basic_ops() {
         let mut vm = Vm::new(Default::default());
         let sc = &mut vm.scope();
-        let obj = OrdObject::null();
+        let obj = sc.register(OrdObject::null());
 
         for i in 0..100 {
             let k1 = sc.intern(format!("k{i}"));

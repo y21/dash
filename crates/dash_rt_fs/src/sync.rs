@@ -5,7 +5,7 @@ use dash_vm::localscope::LocalScope;
 use dash_vm::throw;
 use dash_vm::value::error::Error;
 use dash_vm::value::function::native::{CallContext, register_native_fn};
-use dash_vm::value::object::{Object, OrdObject, PropertyValue};
+use dash_vm::value::object::{OrdObject, PropertyValue};
 use dash_vm::value::ops::conversions::ValueConversion;
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::typedarray::TypedArray;
@@ -19,24 +19,24 @@ pub fn init_module(sc: &mut LocalScope) -> Result<Value, Value> {
     let write_file_sync_value = register_native_fn(sc, write_file_sync_sym, false, write_file_sync);
     let unlink_value = register_native_fn(sc, unlink_sym, false, unlink);
 
-    let module = OrdObject::new(sc);
+    let module = sc.register(OrdObject::new(sc));
     module.set_property(
         read_file_sync_sym.to_key(sc),
-        PropertyValue::static_default(Value::object(read_file_sync_value)),
+        PropertyValue::static_default(read_file_sync_value.into()),
         sc,
     )?;
     module.set_property(
         write_file_sync_sym.to_key(sc),
-        PropertyValue::static_default(Value::object(write_file_sync_value)),
+        PropertyValue::static_default(write_file_sync_value.into()),
         sc,
     )?;
     module.set_property(
         unlink_sym.to_key(sc),
-        PropertyValue::static_default(Value::object(unlink_value)),
+        PropertyValue::static_default(unlink_value.into()),
         sc,
     )?;
 
-    Ok(Value::object(sc.register(module)))
+    Ok(Value::object(module))
 }
 
 fn read_file_sync(cx: CallContext) -> Result<Value, Value> {

@@ -1,6 +1,6 @@
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::Value;
-use dash_vm::value::object::{Object, OrdObject, PropertyValue};
+use dash_vm::value::object::{OrdObject, PropertyValue};
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
 

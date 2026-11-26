@@ -90,8 +90,14 @@ impl Object for Promise {
         self.obj.get_own_property_descriptor(key, sc)
     }
 
-    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
-        self.obj.set_property(key, value, sc)
+    fn set_property(
+        &self,
+        _this: Value,
+        key: PropertyKey,
+        value: PropertyValue,
+        sc: &mut LocalScope,
+    ) -> Result<(), Value> {
+        self.obj.set_property(_this, key, value, sc)
     }
 
     fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
@@ -147,8 +153,14 @@ impl Object for PromiseResolver {
         self.obj.get_own_property_descriptor(key, sc)
     }
 
-    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
-        self.obj.set_property(key, value, sc)
+    fn set_property(
+        &self,
+        _this: Value,
+        key: PropertyKey,
+        value: PropertyValue,
+        sc: &mut LocalScope,
+    ) -> Result<(), Value> {
+        self.obj.set_property(_this, key, value, sc)
     }
 
     fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
@@ -215,8 +227,14 @@ impl Object for PromiseRejecter {
         self.obj.get_own_property_descriptor(key, sc)
     }
 
-    fn set_property(&self, key: PropertyKey, value: PropertyValue, sc: &mut LocalScope) -> Result<(), Value> {
-        self.obj.set_property(key, value, sc)
+    fn set_property(
+        &self,
+        _this: Value,
+        key: PropertyKey,
+        value: PropertyValue,
+        sc: &mut LocalScope,
+    ) -> Result<(), Value> {
+        self.obj.set_property(_this, key, value, sc)
     }
 
     fn delete_property(&self, key: PropertyKey, sc: &mut LocalScope) -> Result<Unrooted, Value> {
