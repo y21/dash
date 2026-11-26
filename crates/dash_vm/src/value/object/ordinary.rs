@@ -144,6 +144,20 @@ impl OrdObject {
         }
         Ok(())
     }
+
+    fn define_property(&self, key: PropertyKey, value: PropertyValue) -> SetPropertyResult {
+        // SAFETY: no reentrancy possible from here
+        let mut guard = unsafe { self.0.borrow_mut() };
+
+        match *guard {
+            InnerOrdObject::Cow { prototype } => {
+                *guard = InnerOrdObject::Linear(PropertyVec::new(prototype));
+                drop(guard);
+                self.define_property(key, value)
+            }
+            InnerOrdObject::Linear(ref mut property_vec) => property_vec.set_property(key, value),
+        }
+    }
 }
 
 #[inline(always)] // Very hot, forcing inline reduces runtime in some lookup microbenchmarks by up to 60%
@@ -216,50 +230,46 @@ impl Object for OrdObject {
         &self,
         this: Value,
         key: PropertyKey,
-        value: PropertyValue,
+        property_value: PropertyValue,
         sc: &mut LocalScope<'_>,
     ) -> Result<(), Value> {
-        // TODO: stop handling __proto__ here and do that in the handler instead? the way we do that here is kinda wrong.
-        // SAFETY: no reentrancy possible from here
-        let mut guard = unsafe { self.0.borrow_mut() };
-
-        match &mut *guard {
-            InnerOrdObject::Cow { prototype } => {
-                if key == PropertyKey::PROTO {
-                    *prototype = value;
-                    Ok(())
-                } else {
-                    let prototype = *prototype;
-                    *guard = InnerOrdObject::Linear(PropertyVec::new(prototype));
-                    drop(guard);
-                    Object::set_property(self, this, key, value, sc)
-                }
+        match property_value.kind {
+            PropertyValueKind::Trap { .. } => {
+                self.define_property(key, property_value);
+                Ok(())
             }
-            InnerOrdObject::Linear(property_vec) => {
-                if key == PropertyKey::PROTO {
-                    *property_vec.get_prototype_mut() = value;
-                    Ok(())
-                } else {
-                    match property_vec.set_property(key, value) {
-                        SetPropertyResult::Ok => Ok(()),
-                        // TODO: throw in strict mode?
-                        SetPropertyResult::NotWritable | SetPropertyResult::NotConfigurable => {
-                            cold_path();
-                            Ok(())
-                        }
-                        SetPropertyResult::InvokeSetter(alloc_id) => {
-                            drop(guard);
-
-                            if let PropertyValueKind::Static(value) = value.kind() {
-                                match alloc_id.apply(This::bound(this), [*value].into(), sc) {
-                                    Ok(_) => Ok(()),
-                                    Err(err) => Err(err.root(sc)),
+            PropertyValueKind::Static(value) => {
+                match self.get_property_descriptor(key, sc) {
+                    Ok(descriptor) => {
+                        match descriptor {
+                            Some(PropertyValue { kind, descriptor }) => match kind {
+                                PropertyValueKind::Trap { set, get: _ } => {
+                                    if let Some(set) = set {
+                                        // Invoke setter
+                                        set.apply(This::bound(this), [value].into(), sc).root(sc)?;
+                                    } else {
+                                        // TODO(strict): throw
+                                    }
+                                    Ok(())
                                 }
-                            } else {
+                                PropertyValueKind::Static(_) => {
+                                    if descriptor.contains(PropertyDataDescriptor::WRITABLE) {
+                                        // Make a new property on self.
+                                        self.define_property(key, property_value);
+                                    } else {
+                                        // Property is not writable: do nothing in sloppy mode OR throw in strict mode.
+                                    }
+                                    Ok(())
+                                }
+                            },
+                            None => {
+                                // Doesn't exist yet. Make a new property.
+                                self.define_property(key, property_value);
                                 Ok(())
                             }
                         }
                     }
+                    Err(err) => Err(err.root(sc)),
                 }
             }
         }
