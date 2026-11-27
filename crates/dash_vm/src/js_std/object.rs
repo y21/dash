@@ -296,3 +296,15 @@ pub fn seal(cx: CallContext) -> Result<Value, Value> {
         Ok(arg)
     }
 }
+
+pub fn prototype_setter(cx: CallContext) -> Result<Value, Value> {
+    let this = cx.this.to_object(cx.scope)?;
+    let proto = cx.args.first().unwrap_or_undefined();
+    this.set_prototype(proto, cx.scope)?;
+    Ok(Value::object(this))
+}
+
+pub fn prototype_getter(cx: CallContext) -> Result<Value, Value> {
+    let this = cx.this.to_object(cx.scope)?;
+    this.get_prototype(cx.scope)
+}

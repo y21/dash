@@ -69,7 +69,6 @@ impl ToPropertyKey for usize {
 }
 
 impl PropertyKey {
-    pub const PROTO: PropertyKey = PropertyKey(PropertyKeyInner::String(JsString::from_sym(sym::__proto__)));
     pub const CONSTRUCTOR: PropertyKey = PropertyKey(PropertyKeyInner::String(JsString::from_sym(sym::constructor)));
 
     pub fn to_js_string(self, sc: &mut LocalScope<'_>) -> Option<interner::Symbol> {

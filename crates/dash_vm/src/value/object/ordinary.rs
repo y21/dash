@@ -168,20 +168,8 @@ fn get_own_property_descriptor_inline(
     // TODO: stop handling __proto__ here and do that in the handler instead?
 
     match *object {
-        InnerOrdObject::Cow { prototype } => {
-            if key == PropertyKey::PROTO {
-                Ok(Some(prototype))
-            } else {
-                Ok(None)
-            }
-        }
-        InnerOrdObject::Linear(ref property_vec) => {
-            if key == PropertyKey::PROTO {
-                Ok(Some(property_vec.get_prototype()))
-            } else {
-                Ok(property_vec.get_property(key))
-            }
-        }
+        InnerOrdObject::Cow { prototype: _ } => Ok(None),
+        InnerOrdObject::Linear(ref property_vec) => Ok(property_vec.get_property(key)),
     }
 }
 
@@ -306,6 +294,7 @@ impl Object for OrdObject {
         // SAFETY: no reentrancy possible from here
         let cell = unsafe { &mut *self.0.borrow_mut() };
 
+        // TODO: check that value is either null or an object
         match cell {
             InnerOrdObject::Cow { prototype } => {
                 *prototype = PropertyValue::static_default(value);
@@ -488,7 +477,6 @@ enum SetPropertyResult {
     Ok,
     NotWritable,
     NotConfigurable,
-    InvokeSetter(ObjectId),
 }
 
 impl PropertyVec {
@@ -629,13 +617,7 @@ impl PropertyVec {
                     }
                 }
 
-                if descriptor.contains(InternalLinearPropertyVecDescriptor::SET) && !assigns_accessor {
-                    // Setter invoked. Don't update descriptor.
-
-                    // SAFETY: descriptor contains `SET`, so `value.trap.set` is initialized
-                    let set = unsafe { value.trap.set.assume_init() };
-                    return SetPropertyResult::InvokeSetter(set);
-                } else if assigns_accessor {
+                if assigns_accessor {
                     // Accessors were updated.
                     // Merge get/set bits from the source into dest, and overwrite configurable/writable/enumerable bits from source
                     *descriptor = descr | (*descriptor & InternalLinearPropertyVecDescriptor::GET_SET);

@@ -163,7 +163,7 @@ impl Vm {
             constructor: ObjectId,
             methods: impl IntoIterator<Item = (interner::Symbol, ObjectId)>,
             symbols: impl IntoIterator<Item = (Symbol, ObjectId)>,
-            fields: impl IntoIterator<Item = (interner::Symbol, Value, Option<PropertyDataDescriptor>)>,
+            properties: impl IntoIterator<Item = (interner::Symbol, PropertyValue)>,
             // Contrary to `prototype`, this optionally sets the function prototype. Should only be `Some`
             // when base is a function
             fn_prototype: Option<(interner::Symbol, ObjectId)>,
@@ -201,11 +201,7 @@ impl Vm {
                 base.set_property(key.to_key(scope), PropertyValue::static_empty(value.into()), scope).unwrap();
             }
 
-            for (key, value, descriptor) in fields {
-                let value = PropertyValue {
-                    kind: PropertyValueKind::Static(value),
-                    descriptor: descriptor.unwrap_or_default()
-                };
+            for (key, value) in properties {
                 base.set_property(key.to_key(scope), value, scope).unwrap();
             }
 
@@ -283,7 +279,16 @@ impl Vm {
                 (sym::propertyIsEnumerable, scope.statics.object_property_is_enumerable)
             ],
             [],
-            [],
+            [(
+                sym::__proto__,
+                PropertyValue::new(
+                    PropertyValueKind::Trap {
+                        get: Some(scope.statics.object_proto_get),
+                        set: Some(scope.statics.object_proto_set),
+                    },
+                    PropertyDataDescriptor::CONFIGURABLE,
+                ),
+            )],
             None,
             &mut scope,
         );
@@ -341,14 +346,14 @@ impl Vm {
             ],
             [],
             [
-                (sym::PI, Value::number(std::f64::consts::PI), Some(PropertyDataDescriptor::empty())),
-                (sym::E, Value::number(std::f64::consts::E), Some(PropertyDataDescriptor::empty())),
-                (sym::LN10, Value::number(std::f64::consts::LN_10), Some(PropertyDataDescriptor::empty())),
-                (sym::LN2, Value::number(std::f64::consts::LN_2), Some(PropertyDataDescriptor::empty())),
-                (sym::LOG10E, Value::number(std::f64::consts::LOG10_E), Some(PropertyDataDescriptor::empty())),
-                (sym::LOG2E, Value::number(std::f64::consts::LOG2_E), Some(PropertyDataDescriptor::empty())),
-                (sym::SQRT1_2, Value::number(std::f64::consts::FRAC_1_SQRT_2), Some(PropertyDataDescriptor::empty())),
-                (sym::SQRT2, Value::number(std::f64::consts::SQRT_2), Some(PropertyDataDescriptor::empty()))
+                (sym::PI, PropertyValue::new(PropertyValueKind::Static(Value::number(std::f64::consts::PI)), PropertyDataDescriptor::empty())),
+                (sym::E, PropertyValue::new(PropertyValueKind::Static(Value::number(std::f64::consts::E)), PropertyDataDescriptor::empty())),
+                (sym::LN10, PropertyValue::new(PropertyValueKind::Static(Value::number(std::f64::consts::LN_10)), PropertyDataDescriptor::empty())),
+                (sym::LN2, PropertyValue::new(PropertyValueKind::Static(Value::number(std::f64::consts::LN_2)), PropertyDataDescriptor::empty())),
+                (sym::LOG10E, PropertyValue::new(PropertyValueKind::Static(Value::number(std::f64::consts::LOG10_E)), PropertyDataDescriptor::empty())),
+                (sym::LOG2E, PropertyValue::new(PropertyValueKind::Static(Value::number(std::f64::consts::LOG2_E)), PropertyDataDescriptor::empty())),
+                (sym::SQRT1_2, PropertyValue::new(PropertyValueKind::Static(Value::number(std::f64::consts::FRAC_1_SQRT_2)), PropertyDataDescriptor::empty())),
+                (sym::SQRT2, PropertyValue::new(PropertyValueKind::Static(Value::number(std::f64::consts::SQRT_2)), PropertyDataDescriptor::empty()))
             ],
             None,
             &mut scope,
@@ -366,14 +371,14 @@ impl Vm {
             ],
             [],
             [
-                (sym::EPSILON, Value::number(f64::EPSILON), Some(PropertyDataDescriptor::empty())),
-                (sym::MAX_SAFE_INTEGER, Value::number(value::primitive::MAX_SAFE_INTEGERF), Some(PropertyDataDescriptor::empty())),
-                (sym::MAX_VALUE, Value::number(f64::MAX), Some(PropertyDataDescriptor::empty())),
-                (sym::MIN_SAFE_INTEGER, Value::number(value::primitive::MIN_SAFE_INTEGERF), Some(PropertyDataDescriptor::empty())),
-                (sym::MIN_VALUE, Value::number(f64::MIN), Some(PropertyDataDescriptor::empty())),
-                (sym::NEGATIVE_INFINITY, Value::number(f64::NEG_INFINITY), Some(PropertyDataDescriptor::empty())),
-                (sym::POSITIVE_INFINITY, Value::number(f64::INFINITY), Some(PropertyDataDescriptor::empty())),
-                (sym::NaN, Value::number(f64::NAN), Some(PropertyDataDescriptor::empty()))
+                (sym::EPSILON, PropertyValue::new(PropertyValueKind::Static(Value::number(f64::EPSILON)), PropertyDataDescriptor::empty())),
+                (sym::MAX_SAFE_INTEGER, PropertyValue::new(PropertyValueKind::Static(Value::number(value::primitive::MAX_SAFE_INTEGERF)), PropertyDataDescriptor::empty())),
+                (sym::MAX_VALUE, PropertyValue::new(PropertyValueKind::Static(Value::number(f64::MAX)), PropertyDataDescriptor::empty())),
+                (sym::MIN_SAFE_INTEGER, PropertyValue::new(PropertyValueKind::Static(Value::number(value::primitive::MIN_SAFE_INTEGERF)), PropertyDataDescriptor::empty())),
+                (sym::MIN_VALUE, PropertyValue::new(PropertyValueKind::Static(Value::number(f64::MIN)), PropertyDataDescriptor::empty())),
+                (sym::NEGATIVE_INFINITY, PropertyValue::new(PropertyValueKind::Static(Value::number(f64::NEG_INFINITY)), PropertyDataDescriptor::empty())),
+                (sym::POSITIVE_INFINITY, PropertyValue::new(PropertyValueKind::Static(Value::number(f64::INFINITY)), PropertyDataDescriptor::empty())),
+                (sym::NaN, PropertyValue::new(PropertyValueKind::Static(Value::number(f64::NAN)), PropertyDataDescriptor::empty()))
             ],
             Some((sym::Number, scope.statics.number_prototype)),
             &mut scope,
@@ -570,18 +575,18 @@ impl Vm {
             [],
             [],
             [
-                (sym::asyncIterator,Value::symbol(scope.statics.symbol_async_iterator), Some(PropertyDataDescriptor::empty())),
-                (sym::hasInstance, Value::symbol(scope.statics.symbol_has_instance), Some(PropertyDataDescriptor::empty())),
-                (sym::iterator, Value::symbol(scope.statics.symbol_iterator), Some(PropertyDataDescriptor::empty())),
-                (sym::match_, Value::symbol(scope.statics.symbol_match), Some(PropertyDataDescriptor::empty())),
-                (sym::matchAll, Value::symbol(scope.statics.symbol_match_all), Some(PropertyDataDescriptor::empty())),
-                (sym::replace, Value::symbol(scope.statics.symbol_replace), Some(PropertyDataDescriptor::empty())),
-                (sym::search, Value::symbol(scope.statics.symbol_search), Some(PropertyDataDescriptor::empty())),
-                (sym::species, Value::symbol(scope.statics.symbol_species), Some(PropertyDataDescriptor::empty())),
-                (sym::split, Value::symbol(scope.statics.symbol_split), Some(PropertyDataDescriptor::empty())),
-                (sym::toPrimitive, Value::symbol(scope.statics.symbol_to_primitive), Some(PropertyDataDescriptor::empty())),
-                (sym::toStringTag, Value::symbol(scope.statics.symbol_to_string_tag), Some(PropertyDataDescriptor::empty())),
-                (sym::unscopables, Value::symbol(scope.statics.symbol_unscopables), Some(PropertyDataDescriptor::empty())),
+                (sym::asyncIterator, PropertyValue::new(PropertyValueKind::Static(Value::symbol(scope.statics.symbol_async_iterator)), PropertyDataDescriptor::empty())),
+                (sym::hasInstance, PropertyValue::new(PropertyValueKind::Static(Value::symbol(scope.statics.symbol_has_instance)), PropertyDataDescriptor::empty())),
+                (sym::iterator, PropertyValue::new(PropertyValueKind::Static(Value::symbol(scope.statics.symbol_iterator)), PropertyDataDescriptor::empty())),
+                (sym::match_, PropertyValue::new(PropertyValueKind::Static(Value::symbol(scope.statics.symbol_match)), PropertyDataDescriptor::empty())),
+                (sym::matchAll, PropertyValue::new(PropertyValueKind::Static(Value::symbol(scope.statics.symbol_match_all)), PropertyDataDescriptor::empty())),
+                (sym::replace, PropertyValue::new(PropertyValueKind::Static(Value::symbol(scope.statics.symbol_replace)), PropertyDataDescriptor::empty())),
+                (sym::search, PropertyValue::new(PropertyValueKind::Static(Value::symbol(scope.statics.symbol_search)), PropertyDataDescriptor::empty())),
+                (sym::species, PropertyValue::new(PropertyValueKind::Static(Value::symbol(scope.statics.symbol_species)), PropertyDataDescriptor::empty())),
+                (sym::split, PropertyValue::new(PropertyValueKind::Static(Value::symbol(scope.statics.symbol_split)), PropertyDataDescriptor::empty())),
+                (sym::toPrimitive, PropertyValue::new(PropertyValueKind::Static(Value::symbol(scope.statics.symbol_to_primitive)), PropertyDataDescriptor::empty())),
+                (sym::toStringTag, PropertyValue::new(PropertyValueKind::Static(Value::symbol(scope.statics.symbol_to_string_tag)), PropertyDataDescriptor::empty())),
+                (sym::unscopables, PropertyValue::new(PropertyValueKind::Static(Value::symbol(scope.statics.symbol_unscopables)), PropertyDataDescriptor::empty())),
             ],
             Some((sym::JsSymbol, scope.statics.symbol_prototype)),
             &mut scope,
@@ -1243,10 +1248,10 @@ impl Vm {
             ],
             [],
             [
-                (sym::NaN, Value::number(f64::NAN), Some(PropertyDataDescriptor::empty())),
-                (sym::Infinity, Value::number(f64::INFINITY), Some(PropertyDataDescriptor::empty())),
-                (sym::undefined, Value::undefined(), Some(PropertyDataDescriptor::empty())),
-                (sym::globalThis, Value::object(global), Some(PropertyDataDescriptor::CONFIGURABLE | PropertyDataDescriptor::WRITABLE)),
+                (sym::NaN, PropertyValue::new(PropertyValueKind::Static(Value::number(f64::NAN)), PropertyDataDescriptor::empty())),
+                (sym::Infinity, PropertyValue::new(PropertyValueKind::Static(Value::number(f64::INFINITY)), PropertyDataDescriptor::empty())),
+                (sym::undefined, PropertyValue::new(PropertyValueKind::Static(Value::undefined()), PropertyDataDescriptor::empty())),
+                (sym::globalThis, PropertyValue::new(PropertyValueKind::Static(Value::object(global)), PropertyDataDescriptor::CONFIGURABLE | PropertyDataDescriptor::WRITABLE)),
             ],
             None,
             &mut scope
