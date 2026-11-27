@@ -214,7 +214,7 @@ impl Object for OrdObject {
 
     fn set_property(
         &self,
-        _this: Value,
+        this: Value,
         key: PropertyKey,
         value: PropertyValue,
         sc: &mut LocalScope<'_>,
@@ -232,7 +232,7 @@ impl Object for OrdObject {
                     let prototype = *prototype;
                     *guard = InnerOrdObject::Linear(PropertyVec::new(prototype));
                     drop(guard);
-                    Object::set_property(self, _this, key, value, sc)
+                    Object::set_property(self, this, key, value, sc)
                 }
             }
             InnerOrdObject::Linear(property_vec) => {
@@ -243,7 +243,7 @@ impl Object for OrdObject {
                     match property_vec.set_property(key, value) {
                         SetPropertyResult::Ok => Ok(()),
                         // TODO: throw in strict mode?
-                        SetPropertyResult::NotWritable => {
+                        SetPropertyResult::NotWritable | SetPropertyResult::NotConfigurable => {
                             cold_path();
                             Ok(())
                         }
@@ -251,7 +251,7 @@ impl Object for OrdObject {
                             drop(guard);
 
                             if let PropertyValueKind::Static(value) = value.kind() {
-                                match alloc_id.apply(This::default(), [*value].into(), sc) {
+                                match alloc_id.apply(This::bound(this), [*value].into(), sc) {
                                     Ok(_) => Ok(()),
                                     Err(err) => Err(err.root(sc)),
                                 }
@@ -477,6 +477,7 @@ struct PropertyVec(NonNull<PropertyVecAllocation>);
 enum SetPropertyResult {
     Ok,
     NotWritable,
+    NotConfigurable,
     InvokeSetter(ObjectId),
 }
 
@@ -592,32 +593,51 @@ impl PropertyVec {
             let value = &mut values[idx as usize];
             let descriptor = &mut descriptors[idx as usize];
 
-            if !descriptor.contains(InternalLinearPropertyVecDescriptor::WRITABLE) {
-                return SetPropertyResult::NotWritable;
-            }
+            let is_writable = descriptor.contains(InternalLinearPropertyVecDescriptor::WRITABLE);
+            let is_configurable = descriptor.contains(InternalLinearPropertyVecDescriptor::CONFIGURABLE);
 
-            if descriptor.contains(InternalLinearPropertyVecDescriptor::GET_SET) {
+            if descriptor.intersects(InternalLinearPropertyVecDescriptor::GET_SET) {
                 cold_path();
-                if descr.contains(InternalLinearPropertyVecDescriptor::GET) {
+
+                let assigns_getter = descr.contains(InternalLinearPropertyVecDescriptor::GET);
+                let assigns_setter = descr.contains(InternalLinearPropertyVecDescriptor::SET);
+                let assigns_accessor = assigns_getter || assigns_setter;
+
+                if assigns_accessor && !is_configurable {
+                    return SetPropertyResult::NotConfigurable;
+                }
+
+                if assigns_getter {
                     unsafe {
                         value.trap.get = val.trap.get;
                     }
                 }
-                if descr.contains(InternalLinearPropertyVecDescriptor::SET) {
+
+                if assigns_setter {
                     unsafe {
                         value.trap.set = val.trap.set;
                     }
                 }
-                if descriptor.contains(InternalLinearPropertyVecDescriptor::SET) {
+
+                if descriptor.contains(InternalLinearPropertyVecDescriptor::SET) && !assigns_accessor {
+                    // Setter invoked. Don't update descriptor.
+
                     // SAFETY: descriptor contains `SET`, so `value.trap.set` is initialized
                     let set = unsafe { value.trap.set.assume_init() };
                     return SetPropertyResult::InvokeSetter(set);
+                } else if assigns_accessor {
+                    // Accessors were updated.
+                    // Merge get/set bits from the source into dest, and overwrite configurable/writable/enumerable bits from source
+                    *descriptor = descr | (*descriptor & InternalLinearPropertyVecDescriptor::GET_SET);
                 }
             } else {
-                *value = val;
-            }
+                if !is_writable {
+                    return SetPropertyResult::NotWritable;
+                }
 
-            *descriptor = descr;
+                *value = val;
+                *descriptor = descr;
+            }
 
             SetPropertyResult::Ok
         } else {
