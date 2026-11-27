@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1795389214637,
+  "lastUpdate": 1795740093727,
   "repoUrl": "https://github.com/y21/dash",
   "entries": {
     "Benchmarks": [
@@ -14957,6 +14957,60 @@ window.BENCHMARK_DATA = {
             "name": "exec tinycolor2 parse hex+toFilter",
             "value": 12693945,
             "range": "± 124265",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "committer": {
+            "email": "30553356+y21@users.noreply.github.com",
+            "name": "y21",
+            "username": "y21"
+          },
+          "distinct": true,
+          "id": "1a3680c28c4bf26b24133b9af7d35c5eb911838e",
+          "message": "add a `this: Value` arg to `set_property`\n\nprerequisite for properly invoking setters with a correct `this`",
+          "timestamp": "2026-11-27T01:30:06+01:00",
+          "tree_id": "1aea1b4dc7ae346d1babe0bfd7c324fb87693008",
+          "url": "https://github.com/y21/dash/commit/1a3680c28c4bf26b24133b9af7d35c5eb911838e"
+        },
+        "date": 1795740092721,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "interpreter",
+            "value": 708774,
+            "range": "± 104543",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_recursive(12)",
+            "value": 77856,
+            "range": "± 1286",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "fib_iterative(12)",
+            "value": 38385,
+            "range": "± 349",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parse+compile tinycolor2",
+            "value": 1011794,
+            "range": "± 36915",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "exec tinycolor2 parse hex+toFilter",
+            "value": 12819118,
+            "range": "± 760383",
             "unit": "ns/iter"
           }
         ]
