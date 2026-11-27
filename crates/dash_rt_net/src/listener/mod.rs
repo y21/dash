@@ -35,6 +35,7 @@ impl Object for TcpListenerConstructor {
 
     fn set_property(
         &self,
+        _this: Value,
         _key: PropertyKey,
         _value: dash_vm::value::object::PropertyValue,
         _sc: &mut dash_vm::localscope::LocalScope,
@@ -163,7 +164,7 @@ enum TcpListenerBridgeMessage {
 
 #[derive(Debug)]
 struct TcpListenerHandle {
-    object: OrdObject,
+    object: ObjectId,
     sender: mpsc::Sender<TcpListenerBridgeMessage>,
 }
 
@@ -181,6 +182,7 @@ impl TcpListenerHandle {
         sender: mpsc::Sender<TcpListenerBridgeMessage>,
         sc: &mut LocalScope,
     ) -> Result<Self, Value> {
+        let object = sc.register(object);
         let name = sc.intern("accept");
         let accept = register_native_fn(sc, name, false, tcplistener_accept);
         object.set_property(
@@ -223,7 +225,7 @@ fn tcplistener_accept(cx: CallContext) -> Result<Value, Value> {
 
 #[derive(Debug)]
 struct TcpStreamHandle {
-    object: OrdObject,
+    object: ObjectId,
     writer_tx: mpsc::UnboundedSender<Box<[u8]>>,
     reader_tx: mpsc::UnboundedSender<oneshot::Sender<Box<[u8]>>>,
 }
@@ -234,7 +236,7 @@ impl TcpStreamHandle {
         writer_tx: mpsc::UnboundedSender<Box<[u8]>>,
         reader_tx: mpsc::UnboundedSender<oneshot::Sender<Box<[u8]>>>,
     ) -> Result<Self, Value> {
-        let object = OrdObject::new(scope);
+        let object = scope.register(OrdObject::new(scope));
         let name = scope.intern("write");
         let write_fn = register_native_fn(scope, name, false, tcpstream_write);
         object.set_property(

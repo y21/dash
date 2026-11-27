@@ -2,7 +2,7 @@ use dash_middle::compiler::StaticImportKind;
 use dash_rt::module::ModuleLoader;
 use dash_vm::localscope::LocalScope;
 use dash_vm::value::Value;
-use dash_vm::value::object::{OrdObject, Object, PropertyValue};
+use dash_vm::value::object::{OrdObject, PropertyValue};
 use dash_vm::value::propertykey::ToPropertyKey;
 use dash_vm::value::string::JsString;
 
@@ -24,7 +24,7 @@ impl ModuleLoader for NetModule {
             return Ok(None);
         }
 
-        let exports = OrdObject::new(sc);
+        let exports = sc.register(OrdObject::new(sc));
         let tcplistener = sc.register(TcpListenerConstructor {});
         let name = sc.intern("TcpListener");
         exports.set_property(
@@ -33,6 +33,6 @@ impl ModuleLoader for NetModule {
             sc,
         )?;
 
-        Ok(Some(Value::object(sc.register(exports))))
+        Ok(Some(Value::object(exports)))
     }
 }
