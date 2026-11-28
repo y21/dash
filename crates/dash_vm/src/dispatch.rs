@@ -1398,8 +1398,12 @@ mod handlers {
                     }
                 }
                 ObjectProperty::Static { key, value } => {
-                    let key = key.0.to_key(&mut cx.scope);
-                    obj.set_property(this, key, PropertyValue::static_default(value), &mut cx.scope)?;
+                    if key.0 == sym::__proto__ {
+                        obj.set_prototype(value, &mut cx.scope)?;
+                    } else {
+                        let key = key.0.to_key(&mut cx.scope);
+                        obj.set_property(this, key, PropertyValue::static_default(value), &mut cx.scope)?;
+                    }
                 }
                 ObjectProperty::Dynamic { key, value } => {
                     let key = PropertyKey::from_value(&mut cx.scope, key)?;
